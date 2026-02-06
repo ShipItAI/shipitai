@@ -81,8 +81,11 @@ func (r *Reviewer) Reply(ctx context.Context, input *ReplyInput) (*ReplyResult, 
 
 	r.logger.Info("using API key for reply", "is_custom_key", isCustomKey, "installation_id", input.InstallationID)
 
+	// Resolve the model for this installation
+	model := r.getModel(ctx, input.InstallationID)
+
 	// Generate reply using Claude
-	claudeResp, err := r.generateReply(ctx, apiKey, input)
+	claudeResp, err := r.generateReply(ctx, apiKey, model, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate reply: %w", err)
 	}
@@ -112,7 +115,7 @@ func (r *Reviewer) Reply(ctx context.Context, input *ReplyInput) (*ReplyResult, 
 }
 
 // generateReply calls Claude to generate a reply and returns usage info.
-func (r *Reviewer) generateReply(ctx context.Context, apiKey string, input *ReplyInput) (*ClaudeAPIResponse, error) {
+func (r *Reviewer) generateReply(ctx context.Context, apiKey, model string, input *ReplyInput) (*ClaudeAPIResponse, error) {
 	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 
 	prompt := fmt.Sprintf(replyPromptTemplate,
@@ -129,7 +132,7 @@ func (r *Reviewer) generateReply(ctx context.Context, apiKey string, input *Repl
 	// Retry on transient failures
 	message, err := retryWithBackoff(timeoutCtx, r.logger, "generateReply", func() (*anthropic.Message, error) {
 		return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.Model("claude-sonnet-4-20250514")),
+			Model:     anthropic.F(anthropic.Model(model)),
 			MaxTokens: anthropic.F(int64(1024)),
 			System: anthropic.F([]anthropic.TextBlockParam{
 				anthropic.NewTextBlock(replySystemPrompt),

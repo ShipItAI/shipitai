@@ -23,7 +23,38 @@ import (
 // If the function returns an error or is nil, the default API key is used.
 type APIKeyFunc func(ctx context.Context, installationID int64) (apiKey string, isCustomKey bool, err error)
 
+// ModelFunc is a function that resolves the Claude model for a given installation.
+// It returns the model ID to use. If it returns an empty string or error, the default model is used.
+type ModelFunc func(ctx context.Context, installationID int64) (string, error)
+
+// ModelOption describes a supported Claude model for selection.
+type ModelOption struct {
+	ID    string
+	Label string
+}
+
+// SupportedModels lists the Claude models available for per-installation selection.
+// The first entry is the default selection.
+var SupportedModels = []ModelOption{
+	{ID: "claude-sonnet-4-5-20250929", Label: "Claude Sonnet 4.5"},
+	{ID: "claude-opus-4-6", Label: "Claude Opus 4.6"},
+	{ID: "claude-haiku-4-5-20251001", Label: "Claude Haiku 4.5"},
+}
+
+// IsValidModel checks whether a model ID is in the supported models list.
+func IsValidModel(id string) bool {
+	for _, m := range SupportedModels {
+		if m.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 const (
+	// DefaultModel is the Claude model used for code reviews.
+	DefaultModel = "claude-sonnet-4-20250514"
+
 	// ClaudeAPITimeout is the maximum time to wait for a Claude API response.
 	ClaudeAPITimeout = 3 * time.Minute
 
@@ -97,6 +128,8 @@ type Reviewer struct {
 	storage        storage.Storage
 	claudeAPIKey   string // Default/fallback API key
 	apiKeyFunc     APIKeyFunc
+	modelFunc      ModelFunc
+	model          string
 	logger         *slog.Logger
 	contextFetcher *ContextFetcher
 }
@@ -108,6 +141,7 @@ func NewReviewer(githubClient *github.Client, claudeAPIKey string, store storage
 		configLoader:   config.NewLoader(githubClient),
 		storage:        store,
 		claudeAPIKey:   claudeAPIKey,
+		model:          DefaultModel,
 		logger:         logger,
 		contextFetcher: NewContextFetcher(githubClient, logger),
 	}
@@ -116,6 +150,33 @@ func NewReviewer(githubClient *github.Client, claudeAPIKey string, store storage
 // SetAPIKeyFunc sets a function to resolve API keys per installation.
 func (r *Reviewer) SetAPIKeyFunc(fn APIKeyFunc) {
 	r.apiKeyFunc = fn
+}
+
+// SetModel overrides the default Claude model used for reviews.
+func (r *Reviewer) SetModel(model string) {
+	r.model = model
+}
+
+// SetModelFunc sets a function to resolve the Claude model per installation.
+func (r *Reviewer) SetModelFunc(fn ModelFunc) {
+	r.modelFunc = fn
+}
+
+// getModel returns the appropriate model for the installation.
+// If a ModelFunc is set and returns a non-empty model, that takes priority.
+// Otherwise, it returns the global model (set via SetModel or DefaultModel).
+func (r *Reviewer) getModel(ctx context.Context, installationID int64) string {
+	if r.modelFunc != nil {
+		model, err := r.modelFunc(ctx, installationID)
+		if err != nil {
+			r.logger.Warn("ModelFunc failed, using default model", "error", err, "installation_id", installationID)
+			return r.model
+		}
+		if model != "" {
+			return model
+		}
+	}
+	return r.model
 }
 
 // getAPIKey returns the appropriate API key for the installation.
@@ -221,6 +282,10 @@ func (r *Reviewer) Review(ctx context.Context, input *ReviewInput) (*ReviewResul
 
 	r.logger.Info("using API key", "is_custom_key", isCustomKey, "installation_id", input.InstallationID)
 
+	// Resolve the model for this installation
+	model := r.getModel(ctx, input.InstallationID)
+	r.logger.Info("using model", "model", model, "installation_id", input.InstallationID)
+
 	// Check if this is a subsequent review (we have a previous review stored)
 	var firstReview *storage.ReviewContext
 	if r.storage != nil {
@@ -235,14 +300,14 @@ func (r *Reviewer) Review(ctx context.Context, input *ReviewInput) (*ReviewResul
 		r.logger.Info("detected subsequent review",
 			"first_review_id", firstReview.ReviewID,
 		)
-		return r.reviewSubsequent(ctx, input, firstReview, cfg, diff, apiKey)
+		return r.reviewSubsequent(ctx, input, firstReview, cfg, diff, apiKey, model)
 	}
 
-	return r.reviewFirst(ctx, input, cfg, diff, apiKey)
+	return r.reviewFirst(ctx, input, cfg, diff, apiKey, model)
 }
 
 // reviewFirst handles the first review of a PR (creates new review with inline comments).
-func (r *Reviewer) reviewFirst(ctx context.Context, input *ReviewInput, cfg *config.Config, diff, apiKey string) (*ReviewResult, error) {
+func (r *Reviewer) reviewFirst(ctx context.Context, input *ReviewInput, cfg *config.Config, diff, apiKey, model string) (*ReviewResult, error) {
 	r.logger.Info("performing first review")
 
 	// Extract changed file paths from the diff
@@ -279,13 +344,13 @@ func (r *Reviewer) reviewFirst(ctx context.Context, input *ReviewInput, cfg *con
 			"diff_size", len(diff),
 			"threshold", ChunkThreshold,
 		)
-		parsed, totalUsage, err = r.reviewChunked(ctx, apiKey, input, diff, cfg)
+		parsed, totalUsage, err = r.reviewChunked(ctx, apiKey, model, input, diff, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed chunked review: %w", err)
 		}
 	} else {
 		// Standard single-call review with context
-		claudeResp, err := r.callClaudeWithContext(ctx, apiKey, input.PRTitle, input.PRBody, diff, cfg.ClaudeMD, cfg.Instructions, reviewCtx)
+		claudeResp, err := r.callClaudeWithContext(ctx, apiKey, model, input.PRTitle, input.PRBody, diff, cfg.ClaudeMD, cfg.Instructions, reviewCtx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get Claude review: %w", err)
 		}
@@ -354,7 +419,7 @@ func (r *Reviewer) reviewFirst(ctx context.Context, input *ReviewInput, cfg *con
 
 // reviewSubsequent handles subsequent reviews by updating the original review body
 // and posting new comments separately.
-func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, firstReview *storage.ReviewContext, cfg *config.Config, diff, apiKey string) (*ReviewResult, error) {
+func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, firstReview *storage.ReviewContext, cfg *config.Config, diff, apiKey, model string) (*ReviewResult, error) {
 	r.logger.Info("performing subsequent review",
 		"first_review_id", firstReview.ReviewID,
 	)
@@ -363,7 +428,7 @@ func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, fir
 	threads, err := r.githubClient.FetchPRReviewThreads(ctx, input.InstallationID, input.Owner, input.Repo, input.PRNumber)
 	if err != nil {
 		r.logger.Warn("failed to fetch review threads, falling back to first review behavior", "error", err)
-		return r.reviewFirst(ctx, input, cfg, diff, apiKey)
+		return r.reviewFirst(ctx, input, cfg, diff, apiKey, model)
 	}
 
 	// Convert threads to ExistingComment format for the prompt
@@ -392,7 +457,7 @@ func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, fir
 	}
 
 	// Call Claude with subsequent review prompt
-	claudeResp, err := r.callClaudeSubsequent(ctx, apiKey, input, diff, existingComments, cfg, reviewCtx)
+	claudeResp, err := r.callClaudeSubsequent(ctx, apiKey, model, input, diff, existingComments, cfg, reviewCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Claude subsequent review: %w", err)
 	}
@@ -489,7 +554,7 @@ func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, fir
 }
 
 // callClaudeSubsequent sends the subsequent review request to Claude.
-func (r *Reviewer) callClaudeSubsequent(ctx context.Context, apiKey string, input *ReviewInput, diff string, existingComments []ExistingComment, cfg *config.Config, reviewCtx *ReviewContext) (*ClaudeAPIResponse, error) {
+func (r *Reviewer) callClaudeSubsequent(ctx context.Context, apiKey, model string, input *ReviewInput, diff string, existingComments []ExistingComment, cfg *config.Config, reviewCtx *ReviewContext) (*ClaudeAPIResponse, error) {
 	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 
 	// Build prompt with existing comments context
@@ -507,7 +572,7 @@ func (r *Reviewer) callClaudeSubsequent(ctx context.Context, apiKey string, inpu
 	// Retry on transient failures
 	message, err := retryWithBackoff(timeoutCtx, r.logger, "callClaudeSubsequent", func() (*anthropic.Message, error) {
 		return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.Model("claude-sonnet-4-20250514")),
+			Model:     anthropic.F(anthropic.Model(model)),
 			MaxTokens: anthropic.F(int64(4096)),
 			System: anthropic.F([]anthropic.TextBlockParam{
 				anthropic.NewTextBlock(GetSubsequentReviewSystemPrompt(cfg.ClaudeMD, cfg.Instructions)),
@@ -576,7 +641,7 @@ func buildConsolidatedSummary(originalSummary, newSummary string, input *ReviewI
 }
 
 // callClaudeWithContext sends the review request to Claude with optional rich context.
-func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, title, description, diff, claudeMD, instructions string, reviewCtx *ReviewContext) (*ClaudeAPIResponse, error) {
+func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, model, title, description, diff, claudeMD, instructions string, reviewCtx *ReviewContext) (*ClaudeAPIResponse, error) {
 	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 
 	// Build prompt with or without context
@@ -595,7 +660,7 @@ func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, title, des
 	// Retry on transient failures
 	message, err := retryWithBackoff(timeoutCtx, r.logger, "callClaude", func() (*anthropic.Message, error) {
 		return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.Model("claude-sonnet-4-20250514")),
+			Model:     anthropic.F(anthropic.Model(model)),
 			MaxTokens: anthropic.F(int64(4096)),
 			System: anthropic.F([]anthropic.TextBlockParam{
 				anthropic.NewTextBlock(GetSystemPromptWithContext(claudeMD, instructions, hasContext)),
@@ -636,7 +701,7 @@ func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, title, des
 }
 
 // reviewChunked handles large diffs by splitting them into chunks and reviewing in parallel.
-func (r *Reviewer) reviewChunked(ctx context.Context, apiKey string, input *ReviewInput, diff string, cfg *config.Config) (*ClaudeResponse, *storage.TokenUsage, error) {
+func (r *Reviewer) reviewChunked(ctx context.Context, apiKey, model string, input *ReviewInput, diff string, cfg *config.Config) (*ClaudeResponse, *storage.TokenUsage, error) {
 	chunks := ChunkDiff(diff, MaxChunkSize)
 
 	r.logger.Info("chunked diff",
@@ -686,7 +751,7 @@ func (r *Reviewer) reviewChunked(ctx context.Context, apiKey string, input *Revi
 			// Fetch context for this chunk
 			chunkCtx := r.contextFetcher.FetchContextForChunk(gctx, contextInput, chunkFiles, i, len(chunks))
 
-			resp, usage, err := r.reviewChunkWithContext(gctx, apiKey, input, &chunk, cfg, chunkCtx)
+			resp, usage, err := r.reviewChunkWithContext(gctx, apiKey, model, input, &chunk, cfg, chunkCtx)
 			if err != nil {
 				return fmt.Errorf("chunk %d/%d: %w", i+1, len(chunks), err)
 			}
@@ -730,7 +795,7 @@ func (r *Reviewer) reviewChunked(ctx context.Context, apiKey string, input *Revi
 
 
 // reviewChunkWithContext reviews a single chunk with optional rich context.
-func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey string, input *ReviewInput, chunk *Chunk, cfg *config.Config, reviewCtx *ReviewContext) (*ClaudeResponse, *storage.TokenUsage, error) {
+func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey, model string, input *ReviewInput, chunk *Chunk, cfg *config.Config, reviewCtx *ReviewContext) (*ClaudeResponse, *storage.TokenUsage, error) {
 	// Extract file paths for the prompt
 	filePaths := make([]string, len(chunk.Files))
 	for i, f := range chunk.Files {
@@ -764,7 +829,7 @@ func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey string, in
 	// Retry on transient failures
 	message, err := retryWithBackoff(timeoutCtx, r.logger, fmt.Sprintf("reviewChunk_%d", chunk.Index+1), func() (*anthropic.Message, error) {
 		return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.Model("claude-sonnet-4-20250514")),
+			Model:     anthropic.F(anthropic.Model(model)),
 			MaxTokens: anthropic.F(int64(4096)),
 			System: anthropic.F([]anthropic.TextBlockParam{
 				anthropic.NewTextBlock(GetSystemPromptWithContext(cfg.ClaudeMD, cfg.Instructions, hasContext)),
