@@ -146,7 +146,6 @@ func (f *ContextFetcher) FetchContext(ctx context.Context, input *ContextInput) 
 		if budgetUsed < budget {
 			importedFiles, used := f.fetchImportedFiles(ctx, input, result.FullFiles, remainingBudget)
 			result.RelatedFiles = append(result.RelatedFiles, importedFiles...)
-			budgetUsed += used
 			f.logger.Info("fetched imported files",
 				"count", len(importedFiles),
 				"budget_used", used,

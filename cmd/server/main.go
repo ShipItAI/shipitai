@@ -283,7 +283,9 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 			OrgLogin:       event.Repository.Owner.Login,
 			InstalledAt:    time.Now().UTC().Format(time.RFC3339),
 		}
-		pgStorage.SaveInstallation(ctx, install)
+		if err := pgStorage.SaveInstallation(ctx, install); err != nil {
+			logger.Error("failed to save installation", "error", err)
+		}
 	}
 
 	go func() {
@@ -385,5 +387,5 @@ func handleReviewComment(w http.ResponseWriter, payload []byte) {
 func jsonResponse(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }

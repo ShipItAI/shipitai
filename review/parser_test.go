@@ -301,7 +301,9 @@ func TestParseResponse(t *testing.T) {
 				return
 			}
 			if !tt.wantErr && tt.validate != nil {
-				tt.validate(result)
+				if err := tt.validate(result); err != nil {
+					t.Errorf("validate() failed: %v", err)
+				}
 			}
 		})
 	}
@@ -417,7 +419,9 @@ func TestParseResponseWithSeverity(t *testing.T) {
 				return
 			}
 			if !tt.wantErr && tt.validate != nil {
-				tt.validate(result)
+				if err := tt.validate(result); err != nil {
+					t.Errorf("validate() failed: %v", err)
+				}
 			}
 		})
 	}

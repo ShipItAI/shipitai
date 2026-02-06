@@ -575,11 +575,6 @@ func buildConsolidatedSummary(originalSummary, newSummary string, input *ReviewI
 	return fmt.Sprintf("%s\n\n---\n\n**Update (%s, commit %s):** %s", originalSummary, timestamp, shortSHA, newSummary)
 }
 
-// callClaude sends the review request to Claude and returns the response with usage.
-func (r *Reviewer) callClaude(ctx context.Context, apiKey, title, description, diff, claudeMD, instructions string) (*ClaudeAPIResponse, error) {
-	return r.callClaudeWithContext(ctx, apiKey, title, description, diff, claudeMD, instructions, nil)
-}
-
 // callClaudeWithContext sends the review request to Claude with optional rich context.
 func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, title, description, diff, claudeMD, instructions string, reviewCtx *ReviewContext) (*ClaudeAPIResponse, error) {
 	client := anthropic.NewClient(option.WithAPIKey(apiKey))
@@ -733,10 +728,6 @@ func (r *Reviewer) reviewChunked(ctx context.Context, apiKey string, input *Revi
 	}, totalUsage, nil
 }
 
-// reviewChunk reviews a single chunk and returns the parsed response.
-func (r *Reviewer) reviewChunk(ctx context.Context, apiKey string, input *ReviewInput, chunk *Chunk, cfg *config.Config) (*ClaudeResponse, *storage.TokenUsage, error) {
-	return r.reviewChunkWithContext(ctx, apiKey, input, chunk, cfg, nil)
-}
 
 // reviewChunkWithContext reviews a single chunk with optional rich context.
 func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey string, input *ReviewInput, chunk *Chunk, cfg *config.Config, reviewCtx *ReviewContext) (*ClaudeResponse, *storage.TokenUsage, error) {

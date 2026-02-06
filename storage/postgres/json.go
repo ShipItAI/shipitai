@@ -21,7 +21,9 @@ func commentsFromJSON(s string) []storage.Comment {
 		return nil
 	}
 	var comments []storage.Comment
-	json.Unmarshal([]byte(s), &comments)
+	if err := json.Unmarshal([]byte(s), &comments); err != nil {
+		return nil
+	}
 	return comments
 }
 

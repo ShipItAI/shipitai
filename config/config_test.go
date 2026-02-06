@@ -104,7 +104,9 @@ func TestParse(t *testing.T) {
 				return
 			}
 			if !tt.wantErr && tt.check != nil {
-				tt.check(config)
+				if err := tt.check(config); err != nil {
+					t.Errorf("check() failed: %v", err)
+				}
 			}
 		})
 	}
