@@ -6,6 +6,7 @@
 //	GITHUB_WEBHOOK_SECRET - Webhook signature verification secret (required)
 //	GITHUB_PRIVATE_KEY   - GitHub App private key in PEM format (required)
 //	ANTHROPIC_API_KEY    - Anthropic API key for Claude (required)
+//	ANTHROPIC_MODEL      - Claude model for reviews (default: claude-sonnet-4-20250514)
 //	DATABASE_URL         - PostgreSQL connection string (required)
 //	PORT                 - HTTP server port (default: 8080)
 //	BOT_NAME             - Bot username for @mentions (default: shipitai)
@@ -160,6 +161,11 @@ func initialize() error {
 
 	// Initialize reviewer with PostgreSQL storage
 	reviewer = review.NewReviewer(githubClient, claudeAPIKey, pgStorage, logger)
+
+	// Optional: override the default Claude model
+	if model := os.Getenv("ANTHROPIC_MODEL"); model != "" {
+		reviewer.SetModel(model)
+	}
 
 	logger.Info("initialized",
 		"app_id", appID,

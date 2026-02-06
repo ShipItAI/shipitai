@@ -89,6 +89,7 @@ shipitai/
 - Supports chunked reviews for large PRs (>100KB)
 - Fetches rich context (full files, test files, imports, commit history) for better reviews
 - Extensible via `APIKeyFunc` callback for custom API key resolution
+- Extensible via `ModelFunc` callback for per-installation model selection
 
 ### Rich Context (`review/context*.go`, `imports.go`)
 - Fetches full file content for modified files (not just the diff)
@@ -223,6 +224,7 @@ This is optional - if no `CLAUDE.md` exists, reviews proceed without project con
 | `GITHUB_WEBHOOK_SECRET` | Yes | Webhook signature verification secret |
 | `GITHUB_PRIVATE_KEY` | Yes | GitHub App private key (PEM format) |
 | `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude |
+| `ANTHROPIC_MODEL` | No | Claude model for reviews (default: claude-sonnet-4-20250514) |
 | `DATABASE_URL` | Yes | PostgreSQL connection string (auto-configured in Docker Compose) |
 | `BOT_NAME` | No | Bot username for @mentions (default: shipitai) |
 | `PORT` | No | HTTP server port (default: 8080) |
@@ -251,10 +253,13 @@ make dev
 
 ## Development Notes
 
-- Uses Claude Sonnet 4 for code reviews
+- Uses Claude Sonnet 4 for code reviews (default: `claude-sonnet-4-20250514`)
 - Packages are top-level (not `internal/`) to support extensibility and external imports
 - `storage.Storage` interface allows plugging in different backends
 - `review.APIKeyFunc` callback allows custom API key resolution without coupling to specific implementations
+- `review.ModelFunc` callback allows per-installation model selection (e.g., letting each installation choose their preferred Claude model)
+- `review.SupportedModels` lists available models; `review.IsValidModel()` validates model IDs
+- Model is resolved once at entry points (`Review`, `Reply`) and threaded through all internal methods — `r.model` is only used as fallback in `getModel()`
 
 ### Large PR Handling (Chunked Reviews)
 Large PRs (>100KB diff) are automatically split into chunks and reviewed in parallel:
