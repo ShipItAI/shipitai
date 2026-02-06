@@ -1,0 +1,47 @@
+# ShipItAI Configuration
+# Place this file at .github/shipitai.yml in your repository
+
+# Enable/disable reviews for this repository
+enabled: true
+
+# When to trigger reviews:
+# - "auto": Review every PR automatically
+# - "on-request": Only review when someone comments @shipitai review
+trigger: auto
+
+# Files to exclude from review (glob patterns)
+# Common exclusions: generated code, vendored dependencies, documentation
+exclude:
+  - vendor/**
+  - node_modules/**
+  - "*.gen.go"
+  - "*.pb.go"
+  - "**/*.min.js"
+  - "**/*.min.css"
+  - docs/**
+  - "*.lock"
+  - "*.sum"
+
+# Custom instructions for the reviewer
+# Use this to provide context about your project, coding standards, or focus areas
+instructions: |
+  Focus on security issues and potential bugs.
+  We use sqlc for database queries.
+  Ignore formatting - we have automated formatters.
+  Our team prefers explicit error handling over panic.
+
+# Rich context configuration
+# These settings control what additional context is provided to the reviewer
+context:
+  enabled: true       # Master switch for all context fetching
+  full_files: true    # Include full file content, not just the diff
+  related_files: true # Include test files and local imports
+  history: true       # Include recent commit history per file
+
+# Contributor protection (default: true)
+# When enabled, automatic reviews are only triggered for repository contributors.
+# Non-contributors can have their PRs reviewed when a contributor comments:
+#   @shipitai review
+# This helps prevent token-burning attacks from malicious PRs.
+# Note: This protection is automatically skipped for private repositories.
+contributor_protection: true

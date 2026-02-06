@@ -1,0 +1,52 @@
+# Docker Compose configuration for self-hosted ShipItAI
+#
+# Usage:
+#   1. Copy .env.example to .env and fill in your values
+#   2. Run: docker compose up -d
+#
+# The webhook URL will be: http://your-server:8080/webhooks/github
+# You'll need to expose this URL to the internet (e.g., via ngrok, Cloudflare Tunnel, or reverse proxy)
+
+services:
+  shipitai:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - GITHUB_PRIVATE_KEY=${GITHUB_PRIVATE_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-shipitai}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-shipitai}?sslmode=disable
+      - BOT_NAME=${BOT_NAME:-shipitai}
+      - PORT=8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-shipitai}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-shipitai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shipitai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

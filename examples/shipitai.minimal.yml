@@ -1,0 +1,10 @@
+# Minimal ShipItAI Configuration
+# Place this file at .github/shipitai.yml in your repository
+#
+# With this minimal config, ShipItAI will:
+# - Automatically review all PRs
+# - Include all files in the review
+# - Use default context settings (full files, related files, history)
+# - Enable contributor protection for public repos
+
+enabled: true

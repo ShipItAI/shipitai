@@ -1,0 +1,23 @@
+# Secrets
+.envrc
+*.pem
+
+# Build artifacts
+bootstrap
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Go workspace (local dev only)
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
