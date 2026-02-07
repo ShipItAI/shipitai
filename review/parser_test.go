@@ -492,6 +492,37 @@ func TestParseResponse(t *testing.T) {
 			response: `{"summary": "Test", "comments": [{"path": "main.go", "line": 1, "body": ""}], "approval": "comment"}`,
 			wantErr:  true,
 		},
+		{
+			name:     "preamble text before json code block",
+			response: "Looking at the diff carefully, I need to identify new issues.\n\n```json\n{\"summary\": \"LGTM\", \"comments\": [], \"approval\": \"approve\"}\n```",
+			wantErr:  false,
+			validate: func(r *ClaudeResponse) error {
+				if r.Summary != "LGTM" {
+					t.Errorf("Summary = %v, want LGTM", r.Summary)
+				}
+				if r.Approval != "approve" {
+					t.Errorf("Approval = %v, want approve", r.Approval)
+				}
+				return nil
+			},
+		},
+		{
+			name:     "preamble text before bare JSON",
+			response: "Let me analyze this PR.\n\n{\"summary\": \"Issues found\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Bug here\", \"severity\": \"blocker\"}], \"approval\": \"request_changes\"}",
+			wantErr:  false,
+			validate: func(r *ClaudeResponse) error {
+				if r.Summary != "Issues found" {
+					t.Errorf("Summary = %v, want Issues found", r.Summary)
+				}
+				if len(r.Comments) != 1 {
+					t.Errorf("Comments length = %v, want 1", len(r.Comments))
+				}
+				if r.Approval != "request_changes" {
+					t.Errorf("Approval = %v, want request_changes", r.Approval)
+				}
+				return nil
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -534,6 +565,26 @@ func TestCleanResponse(t *testing.T) {
 		{
 			name:  "with whitespace",
 			input: "  \n{\"key\": \"value\"}\n  ",
+			want:  `{"key": "value"}`,
+		},
+		{
+			name:  "preamble text before json code block",
+			input: "Looking at the diff carefully, I need to identify new issues.\n\n```json\n{\"key\": \"value\"}\n```",
+			want:  `{"key": "value"}`,
+		},
+		{
+			name:  "preamble text before plain code block",
+			input: "Let me analyze this.\n\n```\n{\"key\": \"value\"}\n```",
+			want:  `{"key": "value"}`,
+		},
+		{
+			name:  "preamble text before bare JSON",
+			input: "Looking at the diff carefully.\n\n{\"key\": \"value\"}",
+			want:  `{"key": "value"}`,
+		},
+		{
+			name:  "preamble with bare JSON and trailing text",
+			input: "Some thinking.\n\n{\"key\": \"value\"}\n\nDone.",
 			want:  `{"key": "value"}`,
 		},
 	}
