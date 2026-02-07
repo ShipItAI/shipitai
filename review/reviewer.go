@@ -121,6 +121,39 @@ func retryWithBackoff[T any](ctx context.Context, logger *slog.Logger, operation
 	return result, fmt.Errorf("max retries exceeded for %s: %w", operation, lastErr)
 }
 
+// callAndParse calls Claude and parses the response, retrying once on parse failure.
+// The callFn should make the Claude API call and return the response.
+// On parse failure, it re-calls Claude (fresh API call) and retries parsing.
+func callAndParse(logger *slog.Logger, operation string, callFn func() (*ClaudeAPIResponse, error)) (*ClaudeResponse, *ClaudeAPIResponse, error) {
+	const maxParseRetries = 1
+
+	for attempt := 0; attempt <= maxParseRetries; attempt++ {
+		claudeResp, err := callFn()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		parsed, parseErr := ParseResponse(claudeResp.Text)
+		if parseErr == nil {
+			return parsed, claudeResp, nil
+		}
+
+		if attempt < maxParseRetries {
+			logger.Warn("parse failure, retrying Claude call",
+				"operation", operation,
+				"attempt", attempt+1,
+				"error", parseErr,
+			)
+			continue
+		}
+
+		return nil, nil, fmt.Errorf("failed to parse Claude response after %d attempts: %w", attempt+1, parseErr)
+	}
+
+	// unreachable
+	return nil, nil, fmt.Errorf("unexpected state in callAndParse")
+}
+
 // Reviewer orchestrates the code review process.
 type Reviewer struct {
 	githubClient   *github.Client
@@ -349,15 +382,13 @@ func (r *Reviewer) reviewFirst(ctx context.Context, input *ReviewInput, cfg *con
 			return nil, fmt.Errorf("failed chunked review: %w", err)
 		}
 	} else {
-		// Standard single-call review with context
-		claudeResp, err := r.callClaudeWithContext(ctx, apiKey, model, input.PRTitle, input.PRBody, diff, cfg.ClaudeMD, cfg.Instructions, reviewCtx)
+		// Standard single-call review with context (retries once on parse failure)
+		var claudeResp *ClaudeAPIResponse
+		parsed, claudeResp, err = callAndParse(r.logger, "reviewFirst", func() (*ClaudeAPIResponse, error) {
+			return r.callClaudeWithContext(ctx, apiKey, model, input.PRTitle, input.PRBody, diff, cfg.ClaudeMD, cfg.Instructions, reviewCtx)
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get Claude review: %w", err)
-		}
-
-		parsed, err = ParseResponse(claudeResp.Text)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse Claude response: %w", err)
 		}
 		totalUsage = claudeResp.Usage
 	}
@@ -456,15 +487,12 @@ func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, fir
 		reviewCtx = r.contextFetcher.FetchContext(ctx, contextInput)
 	}
 
-	// Call Claude with subsequent review prompt
-	claudeResp, err := r.callClaudeSubsequent(ctx, apiKey, model, input, diff, existingComments, cfg, reviewCtx)
+	// Call Claude with subsequent review prompt (retries once on parse failure)
+	parsed, claudeResp, err := callAndParse(r.logger, "reviewSubsequent", func() (*ClaudeAPIResponse, error) {
+		return r.callClaudeSubsequent(ctx, apiKey, model, input, diff, existingComments, cfg, reviewCtx)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Claude subsequent review: %w", err)
-	}
-
-	parsed, err := ParseResponse(claudeResp.Text)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse Claude response: %w", err)
 	}
 
 	// Determine approval based on severity (only blockers trigger request_changes)
@@ -579,6 +607,7 @@ func (r *Reviewer) callClaudeSubsequent(ctx context.Context, apiKey, model strin
 			}),
 			Messages: anthropic.F([]anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
+				anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
 			}),
 		})
 	})
@@ -598,11 +627,11 @@ func (r *Reviewer) callClaudeSubsequent(ctx context.Context, apiKey, model strin
 		"output_tokens", usage.OutputTokens,
 	)
 
-	// Extract text from response
+	// Extract text from response (prepend "{" from the prefill)
 	for _, block := range message.Content {
 		if block.Type == anthropic.ContentBlockTypeText {
 			return &ClaudeAPIResponse{
-				Text:  block.Text,
+				Text:  "{" + block.Text,
 				Usage: usage,
 			}, nil
 		}
@@ -667,6 +696,7 @@ func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, model, tit
 			}),
 			Messages: anthropic.F([]anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
+				anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
 			}),
 		})
 	})
@@ -687,11 +717,11 @@ func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, model, tit
 		"cache_read_tokens", usage.CacheReadInputTokens,
 	)
 
-	// Extract text from response
+	// Extract text from response (prepend "{" from the prefill)
 	for _, block := range message.Content {
 		if block.Type == anthropic.ContentBlockTypeText {
 			return &ClaudeAPIResponse{
-				Text:  block.Text,
+				Text:  "{" + block.Text,
 				Usage: usage,
 			}, nil
 		}
@@ -836,6 +866,7 @@ func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey, model str
 			}),
 			Messages: anthropic.F([]anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
+				anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
 			}),
 		})
 	})
@@ -856,11 +887,11 @@ func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey, model str
 		"output_tokens", usage.OutputTokens,
 	)
 
-	// Extract text from response
+	// Extract text from response (prepend "{" from the prefill)
 	var text string
 	for _, block := range message.Content {
 		if block.Type == anthropic.ContentBlockTypeText {
-			text = block.Text
+			text = "{" + block.Text
 			break
 		}
 	}
@@ -869,10 +900,50 @@ func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey, model str
 		return nil, nil, fmt.Errorf("no text content in Claude response for chunk %d", chunk.Index+1)
 	}
 
-	// Parse the response
-	parsed, err := ParseResponse(text)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse chunk %d response: %w", chunk.Index+1, err)
+	// Parse the response (retry once on parse failure with a fresh API call)
+	parsed, parseErr := ParseResponse(text)
+	if parseErr != nil {
+		r.logger.Warn("chunk parse failure, retrying Claude call",
+			"chunk", chunk.Index+1,
+			"error", parseErr,
+		)
+
+		// Fresh API call
+		retryMsg, retryErr := retryWithBackoff(timeoutCtx, r.logger, fmt.Sprintf("reviewChunk_%d_retry", chunk.Index+1), func() (*anthropic.Message, error) {
+			return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
+				Model:     anthropic.F(anthropic.Model(model)),
+				MaxTokens: anthropic.F(int64(4096)),
+				System: anthropic.F([]anthropic.TextBlockParam{
+					anthropic.NewTextBlock(GetSystemPromptWithContext(cfg.ClaudeMD, cfg.Instructions, hasContext)),
+				}),
+				Messages: anthropic.F([]anthropic.MessageParam{
+					anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
+					anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
+				}),
+			})
+		})
+		if retryErr != nil {
+			return nil, nil, fmt.Errorf("failed to parse chunk %d response: %w", chunk.Index+1, parseErr)
+		}
+
+		// Update usage with retry usage
+		usage.InputTokens += retryMsg.Usage.InputTokens
+		usage.OutputTokens += retryMsg.Usage.OutputTokens
+		usage.CacheReadInputTokens += retryMsg.Usage.CacheReadInputTokens
+		usage.CacheCreationInputTokens += retryMsg.Usage.CacheCreationInputTokens
+
+		text = ""
+		for _, block := range retryMsg.Content {
+			if block.Type == anthropic.ContentBlockTypeText {
+				text = "{" + block.Text
+				break
+			}
+		}
+
+		parsed, parseErr = ParseResponse(text)
+		if parseErr != nil {
+			return nil, nil, fmt.Errorf("failed to parse chunk %d response after retry: %w", chunk.Index+1, parseErr)
+		}
 	}
 
 	// Validate and filter comments against this chunk's diff lines

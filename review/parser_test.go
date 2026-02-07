@@ -587,6 +587,26 @@ func TestCleanResponse(t *testing.T) {
 			input: "Some thinking.\n\n{\"key\": \"value\"}\n\nDone.",
 			want:  `{"key": "value"}`,
 		},
+		{
+			name:  "bare suggestion fragment with no JSON returns as-is",
+			input: "suggestion\nfixed code here\n",
+			want:  "suggestion\nfixed code here",
+		},
+		{
+			name:  "JSON embedded after suggestion text",
+			input: "suggestion\nfixed code here\n\n{\"summary\": \"Test\", \"comments\": [], \"approval\": \"approve\"}",
+			want:  `{"summary": "Test", "comments": [], "approval": "approve"}`,
+		},
+		{
+			name:  "prefilled brace idempotent",
+			input: `{"summary": "Test", "comments": [], "approval": "approve"}`,
+			want:  `{"summary": "Test", "comments": [], "approval": "approve"}`,
+		},
+		{
+			name:  "JSON with suggestion blocks in comment body not confused by backticks",
+			input: "{\"summary\": \"Test\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Fix:\\n```suggestion\\nfixed\\n```\", \"severity\": \"suggestion\"}], \"approval\": \"comment\"}",
+			want:  "{\"summary\": \"Test\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Fix:\\n```suggestion\\nfixed\\n```\", \"severity\": \"suggestion\"}], \"approval\": \"comment\"}",
+		},
 	}
 
 	for _, tt := range tests {
