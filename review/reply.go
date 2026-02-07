@@ -132,14 +132,14 @@ func (r *Reviewer) generateReply(ctx context.Context, apiKey, model string, inpu
 	// Retry on transient failures
 	message, err := retryWithBackoff(timeoutCtx, r.logger, "generateReply", func() (*anthropic.Message, error) {
 		return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.Model(model)),
-			MaxTokens: anthropic.F(int64(1024)),
-			System: anthropic.F([]anthropic.TextBlockParam{
-				anthropic.NewTextBlock(replySystemPrompt),
-			}),
-			Messages: anthropic.F([]anthropic.MessageParam{
+			Model:     anthropic.Model(model),
+			MaxTokens: 1024,
+			System: []anthropic.TextBlockParam{
+				{Text: replySystemPrompt},
+			},
+			Messages: []anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
-			}),
+			},
 		})
 	})
 	if err != nil {
@@ -161,7 +161,7 @@ func (r *Reviewer) generateReply(ctx context.Context, apiKey, model string, inpu
 
 	// Extract text from response
 	for _, block := range message.Content {
-		if block.Type == anthropic.ContentBlockTypeText {
+		if block.Type == "text" {
 			return &ClaudeAPIResponse{
 				Text:  block.Text,
 				Usage: usage,
