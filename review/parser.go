@@ -239,16 +239,31 @@ func cleanResponse(response string) string {
 	}
 
 	// Try a plain ``` code block anywhere in the response
+	// But skip ``` blocks that are inside JSON (e.g., suggestion blocks in comment bodies)
 	if idx := strings.Index(response, "```"); idx >= 0 {
-		inner := response[idx+len("```"):]
-		if endIdx := strings.Index(inner, "```"); endIdx >= 0 {
-			return strings.TrimSpace(inner[:endIdx])
+		// Only use this if the ``` appears before any JSON opening brace
+		jsonStart := strings.Index(response, "{")
+		if jsonStart < 0 || idx < jsonStart {
+			inner := response[idx+len("```"):]
+			if endIdx := strings.Index(inner, "```"); endIdx >= 0 {
+				return strings.TrimSpace(inner[:endIdx])
+			}
+			return strings.TrimSpace(inner)
 		}
-		return strings.TrimSpace(inner)
 	}
 
 	// No code blocks — strip any preamble text before the JSON object
-	if idx := strings.Index(response, "{"); idx > 0 {
+	// Look for the start of the JSON response by finding {"summary" or {"comments" patterns first
+	for _, marker := range []string{`{"summary"`, `{ "summary"`, `{"comments"`, `{ "comments"`} {
+		if idx := strings.Index(response, marker); idx >= 0 {
+			if lastBrace := strings.LastIndex(response, "}"); lastBrace > idx {
+				return strings.TrimSpace(response[idx : lastBrace+1])
+			}
+		}
+	}
+
+	// Fall back to the outermost { ... } extraction
+	if idx := strings.Index(response, "{"); idx >= 0 {
 		if lastBrace := strings.LastIndex(response, "}"); lastBrace > idx {
 			return strings.TrimSpace(response[idx : lastBrace+1])
 		}

@@ -80,13 +80,7 @@ Rules for the response:
 4. Keep comments concise but actionable
 5. If there are no issues, return an empty comments array
 6. Return ONLY valid JSON, no markdown code blocks or other text
-7. When you have a specific code fix, include a GitHub suggestion block in the body:
-   ` + "```" + `suggestion
-   fixed code here
-   ` + "```" + `
-   IMPORTANT: The suggestion replaces ONLY the single line your comment is on.
-   - Only include the replacement for that ONE line, not surrounding context
-   - If the fix spans multiple existing lines, describe it in text instead
+7. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
 
 NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
@@ -180,13 +174,7 @@ Rules for the response:
 4. Keep comments concise but actionable
 5. If there are no issues, return an empty comments array
 6. Return ONLY valid JSON, no markdown code blocks or other text
-7. When you have a specific code fix, include a GitHub suggestion block in the body:
-   ` + "```" + `suggestion
-   fixed code here
-   ` + "```" + `
-   IMPORTANT: The suggestion replaces ONLY the single line your comment is on.
-   - Only include the replacement for that ONE line, not surrounding context
-   - If the fix spans multiple existing lines, describe it in text instead
+7. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
 
 NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
@@ -297,11 +285,12 @@ Severity definitions:
 
 Be concise and actionable. Focus on bugs, security issues, and significant problems.
 
-When you have a specific code fix, use GitHub's suggestion syntax:
+When you have a specific single-line code fix, use GitHub's suggestion syntax so the author can apply it with one click:
+
 ` + "```suggestion\n" + `fixed code here
 ` + "```" + `
 
-IMPORTANT: The suggestion replaces ONLY the single line your comment is attached to.
+IMPORTANT: The suggestion replaces ONLY the single line your comment is attached to. Only include the replacement for that ONE line. If the fix spans multiple existing lines, describe it in text instead.
 
 The diff will be annotated with new-file line numbers (e.g., "  42 | +code here"). Always use the line number shown before the | separator.`
 
