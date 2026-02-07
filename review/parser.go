@@ -12,6 +12,64 @@ import (
 	"github.com/shipitai/shipitai/github"
 )
 
+// AnnotateDiffWithLineNumbers adds new-file line numbers to each diff line
+// so that Claude can directly read the correct line number instead of computing it.
+// Context and added lines get a "NNNN | " prefix; deleted lines get "     | " (no number).
+// File headers, hunk headers, and metadata lines pass through unchanged.
+func AnnotateDiffWithLineNumbers(diff string) string {
+	var result strings.Builder
+	var currentLine int
+	var inHunk bool
+
+	lines := strings.Split(diff, "\n")
+	for _, line := range lines {
+		// New file section resets hunk state
+		if strings.HasPrefix(line, "diff --git") {
+			inHunk = false
+			result.WriteString(line)
+			result.WriteByte('\n')
+			continue
+		}
+
+		// Hunk header — extract new-file starting line
+		if matches := hunkHeaderRegex.FindStringSubmatch(line); matches != nil {
+			startLine, _ := strconv.Atoi(matches[3])
+			currentLine = startLine
+			inHunk = true
+			result.WriteString(line)
+			result.WriteByte('\n')
+			continue
+		}
+
+		// File metadata lines pass through unchanged
+		if !inHunk {
+			result.WriteString(line)
+			result.WriteByte('\n')
+			continue
+		}
+
+		// Inside a hunk: annotate lines with new-file line numbers
+		if strings.HasPrefix(line, "-") {
+			// Deleted line — no new-file line number
+			fmt.Fprintf(&result, "      | %s\n", line)
+		} else if strings.HasPrefix(line, "+") {
+			// Added line
+			fmt.Fprintf(&result, "%5d | %s\n", currentLine, line)
+			currentLine++
+		} else if strings.HasPrefix(line, "\\") {
+			// "\ No newline at end of file"
+			result.WriteString(line)
+			result.WriteByte('\n')
+		} else {
+			// Context line (starts with space) or blank line
+			fmt.Fprintf(&result, "%5d | %s\n", currentLine, line)
+			currentLine++
+		}
+	}
+
+	return strings.TrimSuffix(result.String(), "\n")
+}
+
 // DiffLineMap maps file paths to their valid commentable line numbers.
 // A line is commentable if it appears in a diff hunk on the RIGHT side
 // (i.e., added lines or context lines in the new version of the file).

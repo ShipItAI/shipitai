@@ -1,8 +1,209 @@
 package review
 
 import (
+	"strconv"
+	"strings"
 	"testing"
 )
+
+func TestAnnotateDiffWithLineNumbers(t *testing.T) {
+	tests := []struct {
+		name string
+		diff string
+		want string
+	}{
+		{
+			name: "simple addition",
+			diff: `diff --git a/main.go b/main.go
+index abc123..def456 100644
+--- a/main.go
++++ b/main.go
+@@ -10,3 +10,5 @@ func main() {
+ 	fmt.Println("existing")
++	fmt.Println("new line 1")
++	fmt.Println("new line 2")
+ 	fmt.Println("also existing")
+ }`,
+			want: `diff --git a/main.go b/main.go
+index abc123..def456 100644
+--- a/main.go
++++ b/main.go
+@@ -10,3 +10,5 @@ func main() {
+   10 |  	fmt.Println("existing")
+   11 | +	fmt.Println("new line 1")
+   12 | +	fmt.Println("new line 2")
+   13 |  	fmt.Println("also existing")
+   14 |  }`,
+		},
+		{
+			name: "deletion has no line number",
+			diff: `diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -10,4 +10,2 @@ func main() {
+ 	fmt.Println("keep")
+-	fmt.Println("remove 1")
+-	fmt.Println("remove 2")
+ 	fmt.Println("also keep")`,
+			want: `diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -10,4 +10,2 @@ func main() {
+   10 |  	fmt.Println("keep")
+      | -	fmt.Println("remove 1")
+      | -	fmt.Println("remove 2")
+   11 |  	fmt.Println("also keep")`,
+		},
+		{
+			name: "multiple hunks",
+			diff: `diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -5,3 +5,4 @@ package main
+ import "fmt"
++import "os"
+
+ func main() {
+@@ -20,2 +21,3 @@ func main() {
+ 	fmt.Println("end")
++	os.Exit(0)
+ }`,
+			want: "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ -5,3 +5,4 @@ package main\n    5 |  import \"fmt\"\n    6 | +import \"os\"\n    7 | \n    8 |  func main() {\n@@ -20,2 +21,3 @@ func main() {\n   21 |  \tfmt.Println(\"end\")\n   22 | +\tos.Exit(0)\n   23 |  }",
+		},
+		{
+			name: "new file starts at line 1",
+			diff: `diff --git a/new.go b/new.go
+new file mode 100644
+index 0000000..abc123
+--- /dev/null
++++ b/new.go
+@@ -0,0 +1,3 @@
++package new
++
++func New() {}`,
+			want: `diff --git a/new.go b/new.go
+new file mode 100644
+index 0000000..abc123
+--- /dev/null
++++ b/new.go
+@@ -0,0 +1,3 @@
+    1 | +package new
+    2 | +
+    3 | +func New() {}`,
+		},
+		{
+			name: "deleted file has no line numbers",
+			diff: `diff --git a/old.go b/old.go
+deleted file mode 100644
+index abc123..0000000
+--- a/old.go
++++ /dev/null
+@@ -1,3 +0,0 @@
+-package old
+-
+-func Old() {}`,
+			want: `diff --git a/old.go b/old.go
+deleted file mode 100644
+index abc123..0000000
+--- a/old.go
++++ /dev/null
+@@ -1,3 +0,0 @@
+      | -package old
+      | -
+      | -func Old() {}`,
+		},
+		{
+			name: "no newline at end of file marker passes through",
+			diff: `diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -1,2 +1,2 @@
+ package main
+-var x = 1
++var x = 2
+\ No newline at end of file`,
+			want: `diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -1,2 +1,2 @@
+    1 |  package main
+      | -var x = 1
+    2 | +var x = 2
+\ No newline at end of file`,
+		},
+		{
+			name: "empty diff",
+			diff: "",
+			want: "",
+		},
+		{
+			name: "multiple files",
+			diff: `diff --git a/foo.go b/foo.go
+--- a/foo.go
++++ b/foo.go
+@@ -1,2 +1,3 @@
+ package foo
++var x = 1
+
+diff --git a/bar.go b/bar.go
+--- a/bar.go
++++ b/bar.go
+@@ -10,2 +10,3 @@
+ func bar() {
++	return
+ }`,
+			want: "diff --git a/foo.go b/foo.go\n--- a/foo.go\n+++ b/foo.go\n@@ -1,2 +1,3 @@\n    1 |  package foo\n    2 | +var x = 1\n    3 | \ndiff --git a/bar.go b/bar.go\n--- a/bar.go\n+++ b/bar.go\n@@ -10,2 +10,3 @@\n   10 |  func bar() {\n   11 | +\treturn\n   12 |  }",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := AnnotateDiffWithLineNumbers(tt.diff)
+			if got != tt.want {
+				t.Errorf("AnnotateDiffWithLineNumbers() mismatch\ngot:\n%s\n\nwant:\n%s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAnnotateDiffLineNumbersAreCorrect(t *testing.T) {
+	// This test verifies that the annotated line numbers match what ParseDiffLines computes,
+	// ensuring consistency between the two functions.
+	diff := `diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -5,6 +5,8 @@ package main
+ import "fmt"
++import "os"
+
+ func main() {
+-	fmt.Println("old")
++	fmt.Println("new")
++	os.Exit(0)
+ }`
+
+	diffLines := ParseDiffLines(diff)
+	annotated := AnnotateDiffWithLineNumbers(diff)
+
+	// Extract line numbers from annotation
+	for _, line := range strings.Split(annotated, "\n") {
+		if len(line) < 8 || line[5] != ' ' || line[6] != '|' {
+			continue // Skip non-annotated lines (headers, etc.)
+		}
+		numStr := strings.TrimSpace(line[:5])
+		if numStr == "" {
+			continue // Deleted line, no number
+		}
+		lineNum, err := strconv.Atoi(numStr)
+		if err != nil {
+			t.Errorf("failed to parse line number from %q: %v", line[:5], err)
+			continue
+		}
+		if !diffLines.IsValidCommentLine("main.go", lineNum) {
+			t.Errorf("annotated line %d is not valid according to ParseDiffLines", lineNum)
+		}
+	}
+}
 
 func TestParseDiffLines(t *testing.T) {
 	tests := []struct {
