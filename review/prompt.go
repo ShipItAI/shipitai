@@ -29,7 +29,9 @@ IMPORTANT: The suggestion replaces ONLY the single line your comment is attached
 - Only include the replacement for that ONE line
 - Do NOT include surrounding context lines that already exist in the file
 - If you need to suggest adding new lines, put them all in the suggestion (they replace the one line)
-- If the fix requires changing multiple existing lines, describe it in text instead of using a suggestion block`
+- If the fix requires changing multiple existing lines, describe it in text instead of using a suggestion block
+
+IMPORTANT: The diff will be annotated with new-file line numbers. Each line inside a hunk is prefixed with its line number (e.g., "  42 | +code here"). Always use the line number shown before the | separator — never try to calculate line numbers from hunk headers yourself.`
 
 const contextInstructions = `
 
@@ -74,7 +76,7 @@ Rules for the response:
    - Use "request_changes" for bugs, security issues, or serious problems
    - Use "comment" for suggestions and minor improvements
 2. "path" must exactly match the file path from the diff
-3. "line" must be a line number that appears in the diff (the line being added/modified)
+3. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
 4. Keep comments concise but actionable
 5. If there are no issues, return an empty comments array
 6. Return ONLY valid JSON, no markdown code blocks or other text
@@ -86,6 +88,8 @@ Rules for the response:
    - Only include the replacement for that ONE line, not surrounding context
    - If the fix spans multiple existing lines, describe it in text instead
 
+NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
+
 <diff>
 %s
 </diff>`
@@ -96,7 +100,7 @@ func BuildPrompt(title, description, diff string) string {
 		description = "(No description provided)"
 	}
 
-	return fmt.Sprintf(reviewPromptTemplate, title, description, diff)
+	return fmt.Sprintf(reviewPromptTemplate, title, description, AnnotateDiffWithLineNumbers(diff))
 }
 
 // GetSystemPrompt returns the system prompt for Claude, optionally with project context and custom instructions.
@@ -172,7 +176,7 @@ Rules for the response:
    - Use "request_changes" for bugs, security issues, or serious problems
    - Use "comment" for suggestions and minor improvements
 2. "path" must exactly match the file path from the diff
-3. "line" must be a line number that appears in the diff (the line being added/modified)
+3. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
 4. Keep comments concise but actionable
 5. If there are no issues, return an empty comments array
 6. Return ONLY valid JSON, no markdown code blocks or other text
@@ -183,6 +187,8 @@ Rules for the response:
    IMPORTANT: The suggestion replaces ONLY the single line your comment is on.
    - Only include the replacement for that ONE line, not surrounding context
    - If the fix spans multiple existing lines, describe it in text instead
+
+NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
 <diff>
 %s
@@ -203,7 +209,7 @@ func BuildChunkedPrompt(title, description, diff string, chunkIndex, totalChunks
 		title,
 		description,
 		fileList,
-		diff,
+		AnnotateDiffWithLineNumbers(diff),
 	)
 }
 
@@ -295,7 +301,9 @@ When you have a specific code fix, use GitHub's suggestion syntax:
 ` + "```suggestion\n" + `fixed code here
 ` + "```" + `
 
-IMPORTANT: The suggestion replaces ONLY the single line your comment is attached to.`
+IMPORTANT: The suggestion replaces ONLY the single line your comment is attached to.
+
+The diff will be annotated with new-file line numbers (e.g., "  42 | +code here"). Always use the line number shown before the | separator.`
 
 const subsequentReviewPromptTemplate = `Review the following pull request diff. This is a SUBSEQUENT REVIEW after new commits were pushed.
 
@@ -337,8 +345,10 @@ Rules:
    - Use "comment" for informational feedback
 2. "severity" must be one of: "blocker", "suggestion", "nitpick"
 3. "path" must exactly match the file path from the diff
-4. "line" must be a line number that appears in the diff
+4. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
 5. Return ONLY valid JSON, no markdown code blocks
+
+NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
 <diff>
 %s
@@ -355,7 +365,7 @@ func BuildSubsequentReviewPrompt(title, description, diff string, existingCommen
 		commentContext = "(No previous comments)"
 	}
 
-	return fmt.Sprintf(subsequentReviewPromptTemplate, title, description, commentContext, diff)
+	return fmt.Sprintf(subsequentReviewPromptTemplate, title, description, commentContext, AnnotateDiffWithLineNumbers(diff))
 }
 
 // GetSubsequentReviewSystemPrompt returns the system prompt for subsequent reviews.

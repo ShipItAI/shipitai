@@ -109,6 +109,7 @@ shipitai/
 ### Claude Integration (`review/prompt.go`, `parser.go`)
 - Builds structured prompts for code review
 - Builds chunked prompts with chunk context (X of Y, file list)
+- **Annotates diffs with line numbers** (`AnnotateDiffWithLineNumbers`) before sending to Claude — each line gets a `NNNNN | ` prefix with its new-file line number so Claude can read it directly instead of computing from hunk headers
 - Parses JSON responses into GitHub review comments
 - Handles markdown code block wrapping in responses
 - **Validates comment line numbers** against diff hunks before posting to GitHub (prevents 422 errors from invalid line references)
