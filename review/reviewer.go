@@ -18,6 +18,29 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+// reviewResponseSchema is the JSON schema for structured outputs, matching ClaudeResponse.
+var reviewResponseSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"summary": map[string]any{"type": "string"},
+		"comments": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path":     map[string]any{"type": "string"},
+					"line":     map[string]any{"type": "integer"},
+					"body":     map[string]any{"type": "string"},
+					"severity": map[string]any{"type": "string"},
+				},
+				"required": []string{"path", "line", "body"},
+			},
+		},
+		"approval": map[string]any{"type": "string"},
+	},
+	"required": []string{"summary", "comments", "approval"},
+}
+
 // APIKeyFunc is a function that resolves the API key for a given installation.
 // It returns the API key, whether it's a custom (per-installation) key, and any error.
 // If the function returns an error or is nil, the default API key is used.
@@ -600,15 +623,19 @@ func (r *Reviewer) callClaudeSubsequent(ctx context.Context, apiKey, model strin
 	// Retry on transient failures
 	message, err := retryWithBackoff(timeoutCtx, r.logger, "callClaudeSubsequent", func() (*anthropic.Message, error) {
 		return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.Model(model)),
-			MaxTokens: anthropic.F(int64(4096)),
-			System: anthropic.F([]anthropic.TextBlockParam{
-				anthropic.NewTextBlock(GetSubsequentReviewSystemPrompt(cfg.ClaudeMD, cfg.Instructions)),
-			}),
-			Messages: anthropic.F([]anthropic.MessageParam{
+			Model:     anthropic.Model(model),
+			MaxTokens: 4096,
+			System: []anthropic.TextBlockParam{
+				{Text: GetSubsequentReviewSystemPrompt(cfg.ClaudeMD, cfg.Instructions)},
+			},
+			Messages: []anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
-				anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
-			}),
+			},
+			OutputConfig: anthropic.OutputConfigParam{
+				Format: anthropic.JSONOutputFormatParam{
+					Schema: reviewResponseSchema,
+				},
+			},
 		})
 	})
 	if err != nil {
@@ -627,11 +654,11 @@ func (r *Reviewer) callClaudeSubsequent(ctx context.Context, apiKey, model strin
 		"output_tokens", usage.OutputTokens,
 	)
 
-	// Extract text from response (prepend "{" from the prefill)
+	// Extract text from response (structured outputs guarantees valid JSON)
 	for _, block := range message.Content {
-		if block.Type == anthropic.ContentBlockTypeText {
+		if block.Type == "text" {
 			return &ClaudeAPIResponse{
-				Text:  "{" + block.Text,
+				Text:  block.Text,
 				Usage: usage,
 			}, nil
 		}
@@ -689,15 +716,19 @@ func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, model, tit
 	// Retry on transient failures
 	message, err := retryWithBackoff(timeoutCtx, r.logger, "callClaude", func() (*anthropic.Message, error) {
 		return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.Model(model)),
-			MaxTokens: anthropic.F(int64(4096)),
-			System: anthropic.F([]anthropic.TextBlockParam{
-				anthropic.NewTextBlock(GetSystemPromptWithContext(claudeMD, instructions, hasContext)),
-			}),
-			Messages: anthropic.F([]anthropic.MessageParam{
+			Model:     anthropic.Model(model),
+			MaxTokens: 4096,
+			System: []anthropic.TextBlockParam{
+				{Text: GetSystemPromptWithContext(claudeMD, instructions, hasContext)},
+			},
+			Messages: []anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
-				anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
-			}),
+			},
+			OutputConfig: anthropic.OutputConfigParam{
+				Format: anthropic.JSONOutputFormatParam{
+					Schema: reviewResponseSchema,
+				},
+			},
 		})
 	})
 	if err != nil {
@@ -717,11 +748,11 @@ func (r *Reviewer) callClaudeWithContext(ctx context.Context, apiKey, model, tit
 		"cache_read_tokens", usage.CacheReadInputTokens,
 	)
 
-	// Extract text from response (prepend "{" from the prefill)
+	// Extract text from response (structured outputs guarantees valid JSON)
 	for _, block := range message.Content {
-		if block.Type == anthropic.ContentBlockTypeText {
+		if block.Type == "text" {
 			return &ClaudeAPIResponse{
-				Text:  "{" + block.Text,
+				Text:  block.Text,
 				Usage: usage,
 			}, nil
 		}
@@ -859,15 +890,19 @@ func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey, model str
 	// Retry on transient failures
 	message, err := retryWithBackoff(timeoutCtx, r.logger, fmt.Sprintf("reviewChunk_%d", chunk.Index+1), func() (*anthropic.Message, error) {
 		return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.Model(model)),
-			MaxTokens: anthropic.F(int64(4096)),
-			System: anthropic.F([]anthropic.TextBlockParam{
-				anthropic.NewTextBlock(GetSystemPromptWithContext(cfg.ClaudeMD, cfg.Instructions, hasContext)),
-			}),
-			Messages: anthropic.F([]anthropic.MessageParam{
+			Model:     anthropic.Model(model),
+			MaxTokens: 4096,
+			System: []anthropic.TextBlockParam{
+				{Text: GetSystemPromptWithContext(cfg.ClaudeMD, cfg.Instructions, hasContext)},
+			},
+			Messages: []anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
-				anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
-			}),
+			},
+			OutputConfig: anthropic.OutputConfigParam{
+				Format: anthropic.JSONOutputFormatParam{
+					Schema: reviewResponseSchema,
+				},
+			},
 		})
 	})
 	if err != nil {
@@ -887,11 +922,11 @@ func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey, model str
 		"output_tokens", usage.OutputTokens,
 	)
 
-	// Extract text from response (prepend "{" from the prefill)
+	// Extract text from response (structured outputs guarantees valid JSON)
 	var text string
 	for _, block := range message.Content {
-		if block.Type == anthropic.ContentBlockTypeText {
-			text = "{" + block.Text
+		if block.Type == "text" {
+			text = block.Text
 			break
 		}
 	}
@@ -911,15 +946,19 @@ func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey, model str
 		// Fresh API call
 		retryMsg, retryErr := retryWithBackoff(timeoutCtx, r.logger, fmt.Sprintf("reviewChunk_%d_retry", chunk.Index+1), func() (*anthropic.Message, error) {
 			return client.Messages.New(timeoutCtx, anthropic.MessageNewParams{
-				Model:     anthropic.F(anthropic.Model(model)),
-				MaxTokens: anthropic.F(int64(4096)),
-				System: anthropic.F([]anthropic.TextBlockParam{
-					anthropic.NewTextBlock(GetSystemPromptWithContext(cfg.ClaudeMD, cfg.Instructions, hasContext)),
-				}),
-				Messages: anthropic.F([]anthropic.MessageParam{
+				Model:     anthropic.Model(model),
+				MaxTokens: 4096,
+				System: []anthropic.TextBlockParam{
+					{Text: GetSystemPromptWithContext(cfg.ClaudeMD, cfg.Instructions, hasContext)},
+				},
+				Messages: []anthropic.MessageParam{
 					anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
-					anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
-				}),
+				},
+				OutputConfig: anthropic.OutputConfigParam{
+					Format: anthropic.JSONOutputFormatParam{
+						Schema: reviewResponseSchema,
+					},
+				},
 			})
 		})
 		if retryErr != nil {
@@ -934,8 +973,8 @@ func (r *Reviewer) reviewChunkWithContext(ctx context.Context, apiKey, model str
 
 		text = ""
 		for _, block := range retryMsg.Content {
-			if block.Type == anthropic.ContentBlockTypeText {
-				text = "{" + block.Text
+			if block.Type == "text" {
+				text = block.Text
 				break
 			}
 		}

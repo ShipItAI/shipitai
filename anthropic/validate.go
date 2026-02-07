@@ -21,11 +21,11 @@ func ValidateAPIKey(ctx context.Context, apiKey string) error {
 	// Make a minimal API call to verify the key works
 	// Using Haiku with max 1 token to minimize cost
 	_, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.F(anthropic.ModelClaude3_5HaikuLatest),
-		MaxTokens: anthropic.F(int64(1)),
-		Messages: anthropic.F([]anthropic.MessageParam{
+		Model:     anthropic.ModelClaude3_5HaikuLatest,
+		MaxTokens: 1,
+		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock("hi")),
-		}),
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("API key validation failed: %w", err)

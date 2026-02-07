@@ -79,8 +79,7 @@ Rules for the response:
 3. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
 4. Keep comments concise but actionable
 5. If there are no issues, return an empty comments array
-6. Return ONLY valid JSON, no markdown code blocks or other text
-7. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
+6. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
 
 NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
@@ -173,8 +172,7 @@ Rules for the response:
 3. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
 4. Keep comments concise but actionable
 5. If there are no issues, return an empty comments array
-6. Return ONLY valid JSON, no markdown code blocks or other text
-7. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
+6. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
 
 NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
@@ -335,7 +333,6 @@ Rules:
 2. "severity" must be one of: "blocker", "suggestion", "nitpick"
 3. "path" must exactly match the file path from the diff
 4. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
-5. Return ONLY valid JSON, no markdown code blocks
 
 NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
