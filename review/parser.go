@@ -224,19 +224,35 @@ func ParseResponse(response string) (*ClaudeResponse, error) {
 	return &result, nil
 }
 
-// cleanResponse removes markdown code blocks and other formatting.
+// cleanResponse removes markdown code blocks, preamble text, and other formatting
+// to extract the JSON object from Claude's response.
 func cleanResponse(response string) string {
-	// Remove markdown code blocks
 	response = strings.TrimSpace(response)
 
-	// Remove ```json and ``` wrappers
-	if strings.HasPrefix(response, "```json") {
-		response = strings.TrimPrefix(response, "```json")
-	} else if strings.HasPrefix(response, "```") {
-		response = strings.TrimPrefix(response, "```")
+	// Try to extract JSON from a ```json code block anywhere in the response
+	if idx := strings.Index(response, "```json"); idx >= 0 {
+		inner := response[idx+len("```json"):]
+		if endIdx := strings.Index(inner, "```"); endIdx >= 0 {
+			return strings.TrimSpace(inner[:endIdx])
+		}
+		return strings.TrimSpace(inner)
 	}
 
-	response = strings.TrimSuffix(response, "```")
+	// Try a plain ``` code block anywhere in the response
+	if idx := strings.Index(response, "```"); idx >= 0 {
+		inner := response[idx+len("```"):]
+		if endIdx := strings.Index(inner, "```"); endIdx >= 0 {
+			return strings.TrimSpace(inner[:endIdx])
+		}
+		return strings.TrimSpace(inner)
+	}
+
+	// No code blocks — strip any preamble text before the JSON object
+	if idx := strings.Index(response, "{"); idx > 0 {
+		if lastBrace := strings.LastIndex(response, "}"); lastBrace > idx {
+			return strings.TrimSpace(response[idx : lastBrace+1])
+		}
+	}
 
 	return strings.TrimSpace(response)
 }
