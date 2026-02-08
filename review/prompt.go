@@ -30,6 +30,8 @@ IMPORTANT: The suggestion replaces ONLY the single line your comment is attached
 - Do NOT include surrounding context lines that already exist in the file
 - If you need to suggest adding new lines, put them all in the suggestion (they replace the one line)
 - If the fix requires changing multiple existing lines, describe it in text instead of using a suggestion block
+- If your fix applies to a different line than where you observe the problem, put the comment on the line that needs changing and include the suggestion there
+- NEVER suggest code that is identical to the existing line — that is a no-op and completely useless
 
 IMPORTANT: The diff will be annotated with new-file line numbers. Each line inside a hunk is prefixed with its line number (e.g., "  42 | +code here"). Always use the line number shown before the | separator — never try to calculate line numbers from hunk headers yourself.`
 
@@ -301,7 +303,7 @@ When you have a specific single-line code fix, use GitHub's suggestion syntax so
 ` + "```suggestion\n" + `fixed code here
 ` + "```" + `
 
-IMPORTANT: The suggestion replaces ONLY the single line your comment is attached to. Only include the replacement for that ONE line. If the fix spans multiple existing lines, describe it in text instead.
+IMPORTANT: The suggestion replaces ONLY the single line your comment is attached to. Only include the replacement for that ONE line. If the fix spans multiple existing lines, describe it in text instead. If your fix applies to a different line, put the comment on the line that needs changing. NEVER suggest code identical to the existing line.
 
 The diff will be annotated with new-file line numbers (e.g., "  42 | +code here"). Always use the line number shown before the | separator.`
 
