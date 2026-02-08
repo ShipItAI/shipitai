@@ -24,7 +24,7 @@ When you have a specific code fix to suggest, use GitHub's suggestion syntax so 
 fixed code here
 ` + "```" + `
 
-IMPORTANT: The suggestion replaces ONLY the single line being discussed. Only include the replacement for that ONE line, not surrounding context. If the fix spans multiple existing lines, describe it in text instead.
+IMPORTANT: The suggestion replaces ONLY the single line being discussed. Only include the replacement for that ONE line, not surrounding context. If the fix spans multiple existing lines, describe it in text instead. NEVER suggest code identical to the existing line.
 
 Keep responses short and focused - this is a code review conversation, not an essay.`
 
