@@ -508,7 +508,7 @@ func TestParseResponse(t *testing.T) {
 		},
 		{
 			name:     "preamble text before bare JSON",
-			response: "Let me analyze this PR.\n\n{\"summary\": \"Issues found\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Bug here\", \"severity\": \"blocker\"}], \"approval\": \"request_changes\"}",
+			response: "Let me analyze this PR.\n\n{\"summary\": \"Issues found\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Bug here\", \"severity\": \"critical\"}], \"approval\": \"request_changes\"}",
 			wantErr:  false,
 			validate: func(r *ClaudeResponse) error {
 				if r.Summary != "Issues found" {
@@ -604,8 +604,8 @@ func TestCleanResponse(t *testing.T) {
 		},
 		{
 			name:  "JSON with suggestion blocks in comment body not confused by backticks",
-			input: "{\"summary\": \"Test\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Fix:\\n```suggestion\\nfixed\\n```\", \"severity\": \"suggestion\"}], \"approval\": \"comment\"}",
-			want:  "{\"summary\": \"Test\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Fix:\\n```suggestion\\nfixed\\n```\", \"severity\": \"suggestion\"}], \"approval\": \"comment\"}",
+			input: "{\"summary\": \"Test\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Fix:\\n```suggestion\\nfixed\\n```\", \"severity\": \"medium\"}], \"approval\": \"comment\"}",
+			want:  "{\"summary\": \"Test\", \"comments\": [{\"path\": \"main.go\", \"line\": 10, \"body\": \"Fix:\\n```suggestion\\nfixed\\n```\", \"severity\": \"medium\"}], \"approval\": \"comment\"}",
 		},
 	}
 
@@ -630,9 +630,9 @@ func TestParseResponseWithSeverity(t *testing.T) {
 			response: `{
 				"summary": "Issues found",
 				"comments": [
-					{"path": "main.go", "line": 42, "body": "Critical bug", "severity": "blocker"},
-					{"path": "util.go", "line": 10, "body": "Nice to have", "severity": "suggestion"},
-					{"path": "test.go", "line": 5, "body": "Minor style", "severity": "nitpick"}
+					{"path": "main.go", "line": 42, "body": "Critical bug", "severity": "critical"},
+					{"path": "util.go", "line": 10, "body": "Nice to have", "severity": "medium"},
+					{"path": "test.go", "line": 5, "body": "Minor style", "severity": "low"}
 				],
 				"approval": "request_changes"
 			}`,
@@ -641,20 +641,20 @@ func TestParseResponseWithSeverity(t *testing.T) {
 				if len(r.Comments) != 3 {
 					t.Errorf("Comments length = %v, want 3", len(r.Comments))
 				}
-				if r.Comments[0].Severity != "blocker" {
-					t.Errorf("Comment 0 severity = %v, want blocker", r.Comments[0].Severity)
+				if r.Comments[0].Severity != "critical" {
+					t.Errorf("Comment 0 severity = %v, want critical", r.Comments[0].Severity)
 				}
-				if r.Comments[1].Severity != "suggestion" {
-					t.Errorf("Comment 1 severity = %v, want suggestion", r.Comments[1].Severity)
+				if r.Comments[1].Severity != "medium" {
+					t.Errorf("Comment 1 severity = %v, want medium", r.Comments[1].Severity)
 				}
-				if r.Comments[2].Severity != "nitpick" {
-					t.Errorf("Comment 2 severity = %v, want nitpick", r.Comments[2].Severity)
+				if r.Comments[2].Severity != "low" {
+					t.Errorf("Comment 2 severity = %v, want low", r.Comments[2].Severity)
 				}
 				return nil
 			},
 		},
 		{
-			name: "missing severity defaults to suggestion",
+			name: "missing severity defaults to medium",
 			response: `{
 				"summary": "Test",
 				"comments": [
@@ -664,8 +664,8 @@ func TestParseResponseWithSeverity(t *testing.T) {
 			}`,
 			wantErr: false,
 			validate: func(r *ClaudeResponse) error {
-				if r.Comments[0].Severity != "suggestion" {
-					t.Errorf("Comment severity = %v, want suggestion (default)", r.Comments[0].Severity)
+				if r.Comments[0].Severity != "medium" {
+					t.Errorf("Comment severity = %v, want medium (default)", r.Comments[0].Severity)
 				}
 				return nil
 			},
@@ -711,40 +711,47 @@ func TestDetermineApprovalFromSeverity(t *testing.T) {
 			want:     "approve",
 		},
 		{
-			name: "only blockers -> request_changes",
+			name: "only critical -> request_changes",
 			comments: []ClaudeComment{
-				{Severity: "blocker"},
+				{Severity: "critical"},
 			},
 			want: "request_changes",
 		},
 		{
-			name: "only suggestions -> comment",
+			name: "only high -> request_changes",
 			comments: []ClaudeComment{
-				{Severity: "suggestion"},
-			},
-			want: "comment",
-		},
-		{
-			name: "only nitpicks -> comment",
-			comments: []ClaudeComment{
-				{Severity: "nitpick"},
-			},
-			want: "comment",
-		},
-		{
-			name: "mixed with blocker -> request_changes",
-			comments: []ClaudeComment{
-				{Severity: "suggestion"},
-				{Severity: "blocker"},
-				{Severity: "nitpick"},
+				{Severity: "high"},
 			},
 			want: "request_changes",
 		},
 		{
-			name: "suggestions and nitpicks -> comment",
+			name: "only medium -> comment",
 			comments: []ClaudeComment{
-				{Severity: "suggestion"},
-				{Severity: "nitpick"},
+				{Severity: "medium"},
+			},
+			want: "comment",
+		},
+		{
+			name: "only low -> comment",
+			comments: []ClaudeComment{
+				{Severity: "low"},
+			},
+			want: "comment",
+		},
+		{
+			name: "mixed with critical -> request_changes",
+			comments: []ClaudeComment{
+				{Severity: "medium"},
+				{Severity: "critical"},
+				{Severity: "low"},
+			},
+			want: "request_changes",
+		},
+		{
+			name: "medium and low -> comment",
+			comments: []ClaudeComment{
+				{Severity: "medium"},
+				{Severity: "low"},
 			},
 			want: "comment",
 		},
@@ -768,21 +775,27 @@ func TestFormatCommentWithSeverity(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "blocker adds bold badge",
+			name:     "critical adds bold badge",
 			body:     "Critical issue here",
-			severity: "blocker",
-			want:     "**[BLOCKER]** Critical issue here",
+			severity: "critical",
+			want:     "**[critical]** Critical issue here",
 		},
 		{
-			name:     "nitpick adds italic badge",
+			name:     "high adds bold badge",
+			body:     "Important issue here",
+			severity: "high",
+			want:     "**[high]** Important issue here",
+		},
+		{
+			name:     "low adds italic badge",
 			body:     "Minor style issue",
-			severity: "nitpick",
-			want:     "*[nitpick]* Minor style issue",
+			severity: "low",
+			want:     "*[low]* Minor style issue",
 		},
 		{
-			name:     "suggestion has no badge",
+			name:     "medium has no badge",
 			body:     "Consider this change",
-			severity: "suggestion",
+			severity: "medium",
 			want:     "Consider this change",
 		},
 		{

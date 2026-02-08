@@ -33,7 +33,7 @@ var reviewResponseSchema = map[string]any{
 					"path":     map[string]any{"type": "string"},
 					"line":     map[string]any{"type": "integer"},
 					"body":     map[string]any{"type": "string"},
-					"severity": map[string]any{"type": "string"},
+					"severity": map[string]any{"type": "string", "enum": []any{"low", "medium", "high", "critical"}},
 				},
 				"required": []string{"path", "line", "body", "severity"},
 			},
@@ -520,7 +520,7 @@ func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, fir
 		return nil, fmt.Errorf("failed to get Claude subsequent review: %w", err)
 	}
 
-	// Determine approval based on severity (only blockers trigger request_changes)
+	// Determine approval based on severity (critical/high trigger request_changes)
 	parsed.Approval = DetermineApprovalFromSeverity(parsed.Comments)
 
 	// Validate and filter comments against diff lines
