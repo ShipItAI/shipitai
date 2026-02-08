@@ -81,11 +81,11 @@ Rules for the response:
    - "high": Important issues that should be addressed before merging
    - "medium": Improvements that would be nice but aren't required
    - "low": Very minor issues, style preferences, or optional enhancements
-2. "path" must exactly match the file path from the diff
-3. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
-4. Keep comments concise but actionable
-5. If there are no issues, return an empty comments array
-6. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
+3. "path" must exactly match the file path from the diff
+4. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
+5. Keep comments concise but actionable
+6. If there are no issues, return an empty comments array
+7. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
 
 NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
@@ -180,11 +180,11 @@ Rules for the response:
    - "high": Important issues that should be addressed before merging
    - "medium": Improvements that would be nice but aren't required
    - "low": Very minor issues, style preferences, or optional enhancements
-2. "path" must exactly match the file path from the diff
-3. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
-4. Keep comments concise but actionable
-5. If there are no issues, return an empty comments array
-6. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
+3. "path" must exactly match the file path from the diff
+4. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
+5. Keep comments concise but actionable
+6. If there are no issues, return an empty comments array
+7. When you have a specific single-line code fix, use the GitHub suggestion syntax described in the system prompt
 
 NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
