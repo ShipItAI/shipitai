@@ -21,7 +21,7 @@ func ValidateAPIKey(ctx context.Context, apiKey string) error {
 	// Make a minimal API call to verify the key works
 	// Using Haiku with max 1 token to minimize cost
 	_, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaude3_5HaikuLatest,
+		Model:     anthropic.ModelClaudeHaiku4_5,
 		MaxTokens: 1,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock("hi")),
