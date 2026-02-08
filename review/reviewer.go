@@ -20,20 +20,22 @@ import (
 
 // reviewResponseSchema is the JSON schema for structured outputs, matching ClaudeResponse.
 var reviewResponseSchema = map[string]any{
-	"type": "object",
+	"type":                 "object",
+	"additionalProperties": false,
 	"properties": map[string]any{
 		"summary": map[string]any{"type": "string"},
 		"comments": map[string]any{
 			"type": "array",
 			"items": map[string]any{
-				"type": "object",
+				"type":                 "object",
+				"additionalProperties": false,
 				"properties": map[string]any{
 					"path":     map[string]any{"type": "string"},
 					"line":     map[string]any{"type": "integer"},
 					"body":     map[string]any{"type": "string"},
 					"severity": map[string]any{"type": "string"},
 				},
-				"required": []string{"path", "line", "body"},
+				"required": []string{"path", "line", "body", "severity"},
 			},
 		},
 		"approval": map[string]any{"type": "string"},
