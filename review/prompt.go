@@ -64,7 +64,8 @@ For each issue found, respond in this exact JSON format:
     {
       "path": "path/to/file.go",
       "line": 42,
-      "body": "Your comment here explaining the issue and suggested fix."
+      "body": "Your comment here explaining the issue and suggested fix.",
+      "severity": "medium"
     }
   ],
   "approval": "comment"
@@ -73,8 +74,13 @@ For each issue found, respond in this exact JSON format:
 Rules for the response:
 1. "approval" must be one of: "approve", "request_changes", "comment"
    - Use "approve" only if there are no issues at all
-   - Use "request_changes" for bugs, security issues, or serious problems
-   - Use "comment" for suggestions and minor improvements
+   - Use "request_changes" for critical or high severity issues
+   - Use "comment" for medium and low severity issues
+2. "severity" must be one of: "critical", "high", "medium", "low"
+   - "critical": Bugs, security vulnerabilities, or problems that MUST be fixed
+   - "high": Important issues that should be addressed before merging
+   - "medium": Improvements that would be nice but aren't required
+   - "low": Very minor issues, style preferences, or optional enhancements
 2. "path" must exactly match the file path from the diff
 3. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
 4. Keep comments concise but actionable
@@ -157,7 +163,8 @@ For each issue found, respond in this exact JSON format:
     {
       "path": "path/to/file.go",
       "line": 42,
-      "body": "Your comment here explaining the issue and suggested fix."
+      "body": "Your comment here explaining the issue and suggested fix.",
+      "severity": "medium"
     }
   ],
   "approval": "comment"
@@ -166,8 +173,13 @@ For each issue found, respond in this exact JSON format:
 Rules for the response:
 1. "approval" must be one of: "approve", "request_changes", "comment"
    - Use "approve" only if there are no issues in THIS CHUNK
-   - Use "request_changes" for bugs, security issues, or serious problems
-   - Use "comment" for suggestions and minor improvements
+   - Use "request_changes" for critical or high severity issues
+   - Use "comment" for medium and low severity issues
+2. "severity" must be one of: "critical", "high", "medium", "low"
+   - "critical": Bugs, security vulnerabilities, or problems that MUST be fixed
+   - "high": Important issues that should be addressed before merging
+   - "medium": Improvements that would be nice but aren't required
+   - "low": Very minor issues, style preferences, or optional enhancements
 2. "path" must exactly match the file path from the diff
 3. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
 4. Keep comments concise but actionable
@@ -268,8 +280,8 @@ const subsequentReviewSystemPrompt = `You are an expert code reviewer performing
 Your job is to:
 1. Review ONLY the new changes in this diff
 2. Avoid duplicating feedback that was already given (check the existing comments list)
-3. Classify each issue by severity: blocker, suggestion, or nitpick
-4. Only request changes if there are genuine blockers
+3. Classify each issue by severity: critical, high, medium, or low
+4. Only request changes if there are critical or high severity issues
 
 IMPORTANT:
 - Resolved comments indicate the author addressed that feedback - do NOT repeat it
@@ -277,9 +289,10 @@ IMPORTANT:
 - Only comment on genuinely NEW issues in the current diff
 
 Severity definitions:
-- "blocker": Bugs, security vulnerabilities, or problems that MUST be fixed before merging
-- "suggestion": Improvements that would be nice but aren't required
-- "nitpick": Very minor issues, style preferences, or optional enhancements
+- "critical": Bugs, security vulnerabilities, or problems that MUST be fixed before merging
+- "high": Important issues that should be addressed before merging
+- "medium": Improvements that would be nice but aren't required
+- "low": Very minor issues, style preferences, or optional enhancements
 
 Be concise and actionable. Focus on bugs, security issues, and significant problems.
 
@@ -309,7 +322,7 @@ The following comments were made in previous reviews of this PR. DO NOT duplicat
 
 1. **Skip duplicate feedback**: If an existing comment (resolved OR unresolved) already addresses an issue, do NOT comment on it again
 2. **Focus on new code**: Only comment on issues that weren't present before or weren't already flagged
-3. **Classify by severity**: Every comment must have a severity (blocker, suggestion, nitpick)
+3. **Classify by severity**: Every comment must have a severity (critical, high, medium, low)
 
 Respond in this exact JSON format:
 {
@@ -319,7 +332,7 @@ Respond in this exact JSON format:
       "path": "path/to/file.go",
       "line": 42,
       "body": "Your comment here",
-      "severity": "blocker"
+      "severity": "critical"
     }
   ],
   "approval": "approve"
@@ -327,10 +340,10 @@ Respond in this exact JSON format:
 
 Rules:
 1. "approval" must be one of: "approve", "request_changes", "comment"
-   - Use "request_changes" ONLY if you found NEW blockers
-   - Use "approve" if no NEW blockers (even if there are suggestions)
+   - Use "request_changes" ONLY if you found NEW critical or high severity issues
+   - Use "approve" if no NEW critical/high issues (even if there are medium/low)
    - Use "comment" for informational feedback
-2. "severity" must be one of: "blocker", "suggestion", "nitpick"
+2. "severity" must be one of: "critical", "high", "medium", "low"
 3. "path" must exactly match the file path from the diff
 4. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
 

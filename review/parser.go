@@ -204,7 +204,7 @@ type ClaudeComment struct {
 	Path     string `json:"path"`
 	Line     int    `json:"line"`
 	Body     string `json:"body"`
-	Severity string `json:"severity,omitempty"` // "blocker", "suggestion", "nitpick"
+	Severity string `json:"severity,omitempty"` // "critical", "high", "medium", "low"
 }
 
 // ParseResponse parses Claude's JSON response into a structured review.
@@ -295,12 +295,12 @@ func validateResponse(resp *ClaudeResponse) error {
 		}
 		// Validate and normalize severity
 		switch comment.Severity {
-		case "blocker", "suggestion", "nitpick":
+		case "critical", "high", "medium", "low":
 			// Valid
 		case "":
-			resp.Comments[i].Severity = "suggestion" // Default to suggestion
+			resp.Comments[i].Severity = "medium" // Default to medium
 		default:
-			return fmt.Errorf("comment %d has invalid severity: %s (must be blocker, suggestion, or nitpick)", i, comment.Severity)
+			return fmt.Errorf("comment %d has invalid severity: %s (must be critical, high, medium, or low)", i, comment.Severity)
 		}
 	}
 
@@ -362,16 +362,16 @@ func BuildUnauthorizedTriggerMessage() string {
 }
 
 // DetermineApprovalFromSeverity determines approval based on comment severities.
-// Returns "request_changes" only if there are blockers.
-// Returns "approve" if no blockers and no comments.
-// Returns "comment" if there are non-blocker comments.
+// Returns "request_changes" if there are critical or high severity comments.
+// Returns "approve" if no comments.
+// Returns "comment" if there are only medium/low comments.
 func DetermineApprovalFromSeverity(comments []ClaudeComment) string {
 	if len(comments) == 0 {
 		return "approve"
 	}
 
 	for _, c := range comments {
-		if c.Severity == "blocker" {
+		if c.Severity == "critical" || c.Severity == "high" {
 			return "request_changes"
 		}
 	}
@@ -379,11 +379,11 @@ func DetermineApprovalFromSeverity(comments []ClaudeComment) string {
 	return "comment"
 }
 
-// HasUnresolvedBlockers checks if there are any unresolved blocker comments.
+// HasUnresolvedBlockers checks if there are any unresolved critical/high severity comments.
 // Used when deciding whether to approve after subsequent reviews.
 func HasUnresolvedBlockers(comments []ClaudeComment) bool {
 	for _, c := range comments {
-		if c.Severity == "blocker" {
+		if c.Severity == "critical" || c.Severity == "high" {
 			return true
 		}
 	}
@@ -393,10 +393,12 @@ func HasUnresolvedBlockers(comments []ClaudeComment) bool {
 // FormatCommentWithSeverity adds a severity badge to the comment body.
 func FormatCommentWithSeverity(body, severity string) string {
 	switch severity {
-	case "blocker":
-		return "**[BLOCKER]** " + body
-	case "nitpick":
-		return "*[nitpick]* " + body
+	case "critical":
+		return "**[critical]** " + body
+	case "high":
+		return "**[high]** " + body
+	case "low":
+		return "*[low]* " + body
 	default:
 		return body
 	}
