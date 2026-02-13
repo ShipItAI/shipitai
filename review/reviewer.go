@@ -520,12 +520,12 @@ func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, fir
 		return nil, fmt.Errorf("failed to get Claude subsequent review: %w", err)
 	}
 
-	// Determine approval based on severity (critical/high trigger request_changes)
-	parsed.Approval = DetermineApprovalFromSeverity(parsed.Comments)
-
 	// Validate and filter comments against diff lines
 	diffLines := ParseDiffLines(diff)
 	parsed.Comments, _ = FilterValidComments(parsed.Comments, diffLines, r.logger)
+
+	// Determine approval based on severity of valid comments (after filtering)
+	parsed.Approval = DetermineApprovalFromSeverity(parsed.Comments)
 
 	r.logger.Info("parsed subsequent review response",
 		"summary", parsed.Summary,
@@ -544,37 +544,34 @@ func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, fir
 		r.logger.Info("updated original review body", "review_id", firstReview.ReviewID)
 	}
 
-	// If there are new comments, post them as a minimal COMMENT review
+	// Post subsequent review with the computed approval event
+	reviewComments := make([]github.ReviewComment, len(parsed.Comments))
+	for i, c := range parsed.Comments {
+		reviewComments[i] = github.ReviewComment{
+			Path: c.Path,
+			Line: c.Line,
+			Side: "RIGHT",
+			Body: FormatCommentWithSeverity(c.Body, c.Severity),
+		}
+	}
+
+	event := mapApprovalToEvent(parsed.Approval)
+	reviewReq := &github.ReviewRequest{
+		CommitID: input.HeadSHA,
+		Body:     "", // Empty body since we updated the original
+		Event:    event,
+		Comments: reviewComments,
+	}
+
 	var newReviewID int64
 	var newReviewURL string
-	if len(parsed.Comments) > 0 {
-		reviewComments := make([]github.ReviewComment, len(parsed.Comments))
-		for i, c := range parsed.Comments {
-			reviewComments[i] = github.ReviewComment{
-				Path: c.Path,
-				Line: c.Line,
-				Side: "RIGHT",
-				Body: FormatCommentWithSeverity(c.Body, c.Severity),
-			}
-		}
-
-		// Create a minimal COMMENT review (not APPROVE or REQUEST_CHANGES)
-		// to attach the new inline comments
-		reviewReq := &github.ReviewRequest{
-			CommitID: input.HeadSHA,
-			Body:     "", // Empty body since we updated the original
-			Event:    "COMMENT",
-			Comments: reviewComments,
-		}
-
-		newReview, err := r.githubClient.CreateReview(ctx, input.InstallationID, input.Owner, input.Repo, input.PRNumber, reviewReq)
-		if err != nil {
-			return nil, fmt.Errorf("failed to post new comments: %w", err)
-		}
-		newReviewID = newReview.ID
-		newReviewURL = newReview.HTMLURL
-		r.logger.Info("posted new comments", "review_id", newReview.ID, "comment_count", len(parsed.Comments))
+	newReview, err := r.githubClient.CreateReview(ctx, input.InstallationID, input.Owner, input.Repo, input.PRNumber, reviewReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to post subsequent review: %w", err)
 	}
+	newReviewID = newReview.ID
+	newReviewURL = newReview.HTMLURL
+	r.logger.Info("posted subsequent review", "review_id", newReview.ID, "event", event, "comment_count", len(parsed.Comments))
 
 	// Store review context for this subsequent review
 	if r.storage != nil {
