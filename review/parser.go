@@ -363,8 +363,8 @@ func BuildUnauthorizedTriggerMessage() string {
 
 // DetermineApprovalFromSeverity determines approval based on comment severities.
 // Returns "request_changes" if there are critical or high severity comments.
-// Returns "approve" if no comments.
-// Returns "comment" if there are only medium/low comments.
+// Returns "comment" if there are medium severity comments.
+// Returns "approve" if there are only low severity comments or no comments.
 func DetermineApprovalFromSeverity(comments []ClaudeComment) string {
 	if len(comments) == 0 {
 		return "approve"
@@ -376,7 +376,13 @@ func DetermineApprovalFromSeverity(comments []ClaudeComment) string {
 		}
 	}
 
-	return "comment"
+	for _, c := range comments {
+		if c.Severity == "medium" {
+			return "comment"
+		}
+	}
+
+	return "approve"
 }
 
 // HasUnresolvedBlockers checks if there are any unresolved critical/high severity comments.
