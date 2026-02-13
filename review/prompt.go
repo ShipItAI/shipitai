@@ -75,9 +75,9 @@ For each issue found, respond in this exact JSON format:
 
 Rules for the response:
 1. "approval" must be one of: "approve", "request_changes", "comment"
-   - Use "approve" only if there are no issues at all
+   - Use "approve" if there are no issues, or only low severity issues
    - Use "request_changes" for critical or high severity issues
-   - Use "comment" for medium and low severity issues
+   - Use "comment" for medium severity issues (but no critical/high)
 2. "severity" must be one of: "critical", "high", "medium", "low"
    - "critical": Bugs, security vulnerabilities, or problems that MUST be fixed
    - "high": Important issues that should be addressed before merging
@@ -174,9 +174,9 @@ For each issue found, respond in this exact JSON format:
 
 Rules for the response:
 1. "approval" must be one of: "approve", "request_changes", "comment"
-   - Use "approve" only if there are no issues in THIS CHUNK
+   - Use "approve" if there are no issues in THIS CHUNK, or only low severity issues
    - Use "request_changes" for critical or high severity issues
-   - Use "comment" for medium and low severity issues
+   - Use "comment" for medium severity issues (but no critical/high)
 2. "severity" must be one of: "critical", "high", "medium", "low"
    - "critical": Bugs, security vulnerabilities, or problems that MUST be fixed
    - "high": Important issues that should be addressed before merging
@@ -343,8 +343,8 @@ Respond in this exact JSON format:
 Rules:
 1. "approval" must be one of: "approve", "request_changes", "comment"
    - Use "request_changes" ONLY if you found NEW critical or high severity issues
-   - Use "approve" if no NEW critical/high issues (even if there are medium/low)
-   - Use "comment" for informational feedback
+   - Use "comment" if you found NEW medium severity issues (but no critical/high)
+   - Use "approve" if no NEW critical/high/medium issues (even if there are low)
 2. "severity" must be one of: "critical", "high", "medium", "low"
 3. "path" must exactly match the file path from the diff
 4. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.

@@ -732,11 +732,11 @@ func TestDetermineApprovalFromSeverity(t *testing.T) {
 			want: "comment",
 		},
 		{
-			name: "only low -> comment",
+			name: "only low -> approve",
 			comments: []ClaudeComment{
 				{Severity: "low"},
 			},
-			want: "comment",
+			want: "approve",
 		},
 		{
 			name: "mixed with critical -> request_changes",
