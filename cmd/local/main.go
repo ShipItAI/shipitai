@@ -95,6 +95,7 @@ func initialize() error {
 
 	// No database in local mode
 	reviewer = review.NewReviewer(githubClient, claudeAPIKey, nil, logger)
+	reviewer.SetBotName(botName)
 
 	// Optional: override the default Claude model
 	if model := os.Getenv("ANTHROPIC_MODEL"); model != "" {
