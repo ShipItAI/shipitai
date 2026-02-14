@@ -161,6 +161,7 @@ func initialize() error {
 
 	// Initialize reviewer with PostgreSQL storage
 	reviewer = review.NewReviewer(githubClient, claudeAPIKey, pgStorage, logger)
+	reviewer.SetBotName(botName)
 
 	// Optional: override the default Claude model
 	if model := os.Getenv("ANTHROPIC_MODEL"); model != "" {

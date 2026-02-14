@@ -217,6 +217,7 @@ type Reviewer struct {
 	apiKeyFunc     APIKeyFunc
 	modelFunc      ModelFunc
 	model          string
+	botName        string
 	logger         *slog.Logger
 	contextFetcher *ContextFetcher
 }
@@ -232,6 +233,11 @@ func NewReviewer(githubClient *github.Client, claudeAPIKey string, store storage
 		logger:         logger,
 		contextFetcher: NewContextFetcher(githubClient, logger),
 	}
+}
+
+// SetBotName sets the bot username used to filter which review threads can be auto-resolved.
+func (r *Reviewer) SetBotName(name string) {
+	r.botName = name
 }
 
 // SetAPIKeyFunc sets a function to resolve API keys per installation.
@@ -721,12 +727,13 @@ func convertThreadsToExistingComments(threads []github.ReviewThread) []ExistingC
 }
 
 // resolveThreads resolves the given thread IDs, filtering to only unresolved threads
-// that were authored by ShipItAI (present in existingComments).
+// that were authored by ShipItAI.
 func (r *Reviewer) resolveThreads(ctx context.Context, installationID int64, threadIDs []string, existingComments []ExistingComment) {
-	// Build a set of valid thread IDs: must be unresolved and present in our known threads
+	// Build a set of valid thread IDs: must be unresolved and authored by our bot
+	botLogin := r.botName + "[bot]"
 	validThreads := make(map[string]bool)
 	for _, c := range existingComments {
-		if c.ThreadID != "" && !c.IsResolved {
+		if c.ThreadID != "" && !c.IsResolved && c.Author == botLogin {
 			validThreads[c.ThreadID] = true
 		}
 	}
