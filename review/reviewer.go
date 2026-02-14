@@ -43,6 +43,35 @@ var reviewResponseSchema = map[string]any{
 	"required": []string{"summary", "comments", "approval"},
 }
 
+// subsequentReviewResponseSchema extends the review schema with resolved_threads for subsequent reviews.
+var subsequentReviewResponseSchema = map[string]any{
+	"type":                 "object",
+	"additionalProperties": false,
+	"properties": map[string]any{
+		"summary": map[string]any{"type": "string"},
+		"comments": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"path":     map[string]any{"type": "string"},
+					"line":     map[string]any{"type": "integer"},
+					"body":     map[string]any{"type": "string"},
+					"severity": map[string]any{"type": "string", "enum": []any{"low", "medium", "high", "critical"}},
+				},
+				"required": []string{"path", "line", "body", "severity"},
+			},
+		},
+		"resolved_threads": map[string]any{
+			"type":  "array",
+			"items": map[string]any{"type": "string"},
+		},
+		"approval": map[string]any{"type": "string"},
+	},
+	"required": []string{"summary", "comments", "resolved_threads", "approval"},
+}
+
 // APIKeyFunc is a function that resolves the API key for a given installation.
 // It returns the API key, whether it's a custom (per-installation) key, and any error.
 // If the function returns an error or is nil, the default API key is used.
@@ -573,6 +602,11 @@ func (r *Reviewer) reviewSubsequent(ctx context.Context, input *ReviewInput, fir
 	newReviewURL = newReview.HTMLURL
 	r.logger.Info("posted subsequent review", "review_id", newReview.ID, "event", event, "comment_count", len(parsed.Comments))
 
+	// Resolve threads that Claude identified as addressed
+	if len(parsed.ResolvedThreads) > 0 {
+		r.resolveThreads(ctx, input.InstallationID, parsed.ResolvedThreads, existingComments)
+	}
+
 	// Store review context for this subsequent review
 	if r.storage != nil {
 		storeCtx := &storage.ReviewContext{
@@ -632,7 +666,7 @@ func (r *Reviewer) callClaudeSubsequent(ctx context.Context, apiKey, model strin
 			},
 			OutputConfig: anthropic.OutputConfigParam{
 				Format: anthropic.JSONOutputFormatParam{
-					Schema: reviewResponseSchema,
+					Schema: subsequentReviewResponseSchema,
 				},
 			},
 		})
@@ -679,10 +713,46 @@ func convertThreadsToExistingComments(threads []github.ReviewThread) []ExistingC
 				Body:       c.Body,
 				IsResolved: t.IsResolved,
 				Author:     c.Author,
+				ThreadID:   t.ID,
 			})
 		}
 	}
 	return comments
+}
+
+// resolveThreads resolves the given thread IDs, filtering to only unresolved threads
+// that were authored by ShipItAI (present in existingComments).
+func (r *Reviewer) resolveThreads(ctx context.Context, installationID int64, threadIDs []string, existingComments []ExistingComment) {
+	// Build a set of valid thread IDs: must be unresolved and present in our known threads
+	validThreads := make(map[string]bool)
+	for _, c := range existingComments {
+		if c.ThreadID != "" && !c.IsResolved {
+			validThreads[c.ThreadID] = true
+		}
+	}
+
+	resolved := 0
+	for _, threadID := range threadIDs {
+		if !validThreads[threadID] {
+			r.logger.Debug("skipping thread resolution: not a valid unresolved thread",
+				"thread_id", threadID,
+			)
+			continue
+		}
+
+		if err := r.githubClient.ResolveReviewThread(ctx, installationID, threadID); err != nil {
+			r.logger.Warn("failed to resolve review thread",
+				"thread_id", threadID,
+				"error", err,
+			)
+			continue
+		}
+		resolved++
+	}
+
+	if resolved > 0 {
+		r.logger.Info("resolved outdated review threads", "count", resolved)
+	}
 }
 
 // buildConsolidatedSummary creates an updated summary that appends to the original.

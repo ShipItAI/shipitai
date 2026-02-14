@@ -120,6 +120,34 @@ query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
 }
 `
 
+const resolveReviewThreadMutation = `
+mutation($threadId: ID!) {
+  resolveReviewThread(input: {threadId: $threadId}) {
+    thread {
+      id
+      isResolved
+    }
+  }
+}
+`
+
+// resolveThreadResponse represents the GraphQL response for resolving a thread.
+type resolveThreadResponse struct {
+	Data   *resolveThreadData `json:"data"`
+	Errors []graphQLError     `json:"errors,omitempty"`
+}
+
+type resolveThreadData struct {
+	ResolveReviewThread *resolveThreadResult `json:"resolveReviewThread"`
+}
+
+type resolveThreadResult struct {
+	Thread *struct {
+		ID         string `json:"id"`
+		IsResolved bool   `json:"isResolved"`
+	} `json:"thread"`
+}
+
 // maxPaginationPages is the maximum number of pages to fetch to prevent infinite loops.
 const maxPaginationPages = 100
 
@@ -245,4 +273,53 @@ func (c *Client) fetchReviewThreadsPage(ctx context.Context, client *http.Client
 	}
 
 	return threads, graphQLThreads.PageInfo, nil
+}
+
+// ResolveReviewThread resolves a review thread by its GraphQL node ID.
+func (c *Client) ResolveReviewThread(ctx context.Context, installationID int64, threadID string) error {
+	client, err := c.getInstallationClient(installationID)
+	if err != nil {
+		return err
+	}
+
+	reqBody := graphQLRequest{
+		Query: resolveReviewThreadMutation,
+		Variables: map[string]interface{}{
+			"threadId": threadID,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal GraphQL request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", graphQLURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute GraphQL mutation: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("GraphQL mutation failed: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var result resolveThreadResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to decode GraphQL response: %w", err)
+	}
+
+	if len(result.Errors) > 0 {
+		return fmt.Errorf("GraphQL errors: %v", result.Errors)
+	}
+
+	return nil
 }

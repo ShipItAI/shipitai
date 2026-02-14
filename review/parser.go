@@ -194,9 +194,10 @@ func truncateString(s string, maxLen int) string {
 
 // ClaudeResponse represents Claude's structured review response.
 type ClaudeResponse struct {
-	Summary  string          `json:"summary"`
-	Comments []ClaudeComment `json:"comments"`
-	Approval string          `json:"approval"`
+	Summary         string          `json:"summary"`
+	Comments        []ClaudeComment `json:"comments"`
+	Approval        string          `json:"approval"`
+	ResolvedThreads []string        `json:"resolved_threads,omitempty"`
 }
 
 // ClaudeComment represents a single comment from Claude's review.

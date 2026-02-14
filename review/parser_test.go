@@ -618,6 +618,84 @@ func TestCleanResponse(t *testing.T) {
 	}
 }
 
+func TestParseResponseWithResolvedThreads(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		wantErr  bool
+		validate func(*ClaudeResponse) error
+	}{
+		{
+			name: "parses resolved_threads",
+			response: `{
+				"summary": "Issues addressed",
+				"comments": [],
+				"resolved_threads": ["PRRT_abc123", "PRRT_def456"],
+				"approval": "approve"
+			}`,
+			wantErr: false,
+			validate: func(r *ClaudeResponse) error {
+				if len(r.ResolvedThreads) != 2 {
+					t.Errorf("ResolvedThreads length = %v, want 2", len(r.ResolvedThreads))
+				}
+				if r.ResolvedThreads[0] != "PRRT_abc123" {
+					t.Errorf("ResolvedThreads[0] = %v, want PRRT_abc123", r.ResolvedThreads[0])
+				}
+				if r.ResolvedThreads[1] != "PRRT_def456" {
+					t.Errorf("ResolvedThreads[1] = %v, want PRRT_def456", r.ResolvedThreads[1])
+				}
+				return nil
+			},
+		},
+		{
+			name: "empty resolved_threads",
+			response: `{
+				"summary": "New issues",
+				"comments": [],
+				"resolved_threads": [],
+				"approval": "approve"
+			}`,
+			wantErr: false,
+			validate: func(r *ClaudeResponse) error {
+				if len(r.ResolvedThreads) != 0 {
+					t.Errorf("ResolvedThreads length = %v, want 0", len(r.ResolvedThreads))
+				}
+				return nil
+			},
+		},
+		{
+			name: "missing resolved_threads field",
+			response: `{
+				"summary": "Review",
+				"comments": [],
+				"approval": "approve"
+			}`,
+			wantErr: false,
+			validate: func(r *ClaudeResponse) error {
+				if r.ResolvedThreads != nil {
+					t.Errorf("ResolvedThreads = %v, want nil", r.ResolvedThreads)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseResponse(tt.response)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseResponse() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && tt.validate != nil {
+				if err := tt.validate(result); err != nil {
+					t.Errorf("validate() failed: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestParseResponseWithSeverity(t *testing.T) {
 	tests := []struct {
 		name     string

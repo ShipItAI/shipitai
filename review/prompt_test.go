@@ -26,11 +26,13 @@ func TestBuildSubsequentReviewPrompt(t *testing.T) {
 					Body:       "Consider error handling",
 					IsResolved: false,
 					Author:     "reviewer",
+					ThreadID:   "PRRT_abc123",
 				},
 			},
 			wantContains: []string{
 				"[UNRESOLVED]",
 				"main.go:42",
+				"[thread:PRRT_abc123]",
 				"@reviewer",
 				"Consider error handling",
 				"SUBSEQUENT REVIEW",
@@ -77,6 +79,25 @@ func TestBuildSubsequentReviewPrompt(t *testing.T) {
 				"medium",
 				"low",
 				"severity",
+			},
+		},
+		{
+			name:        "includes resolved_threads in JSON format",
+			title:       "Test PR",
+			description: "Test description",
+			diff:        "diff --git a/main.go b/main.go\n+line",
+			existingComments: []ExistingComment{
+				{
+					Path:       "main.go",
+					Line:       10,
+					Body:       "Fix this",
+					IsResolved: false,
+					ThreadID:   "PRRT_xyz",
+				},
+			},
+			wantContains: []string{
+				"resolved_threads",
+				"[thread:PRRT_xyz]",
 			},
 		},
 	}
@@ -168,6 +189,33 @@ func TestFormatExistingComments(t *testing.T) {
 				},
 			},
 			want: "...",
+		},
+		{
+			name: "includes thread ID",
+			comments: []ExistingComment{
+				{
+					Path:       "main.go",
+					Line:       10,
+					Body:       "Fix this bug",
+					IsResolved: false,
+					Author:     "bot",
+					ThreadID:   "PRRT_abc123",
+				},
+			},
+			want: "[thread:PRRT_abc123]",
+		},
+		{
+			name: "omits thread tag when no thread ID",
+			comments: []ExistingComment{
+				{
+					Path:       "main.go",
+					Line:       10,
+					Body:       "Fix this bug",
+					IsResolved: false,
+					Author:     "bot",
+				},
+			},
+			want: "[UNRESOLVED] main.go:10",
 		},
 	}
 
