@@ -275,6 +275,7 @@ type ExistingComment struct {
 	Body       string
 	IsResolved bool
 	Author     string
+	ThreadID   string // GraphQL node ID for resolving the thread
 }
 
 const subsequentReviewSystemPrompt = `You are an expert code reviewer performing a SUBSEQUENT review of a pull request.
@@ -289,6 +290,7 @@ IMPORTANT:
 - Resolved comments indicate the author addressed that feedback - do NOT repeat it
 - Unresolved comments are still pending - do NOT repeat them either
 - Only comment on genuinely NEW issues in the current diff
+- If a previous UNRESOLVED comment has been addressed by the new changes, include its thread ID in the "resolved_threads" array so it can be auto-resolved. Thread IDs look like [thread:PRRT_xxx] in the existing comments list.
 
 Severity definitions:
 - "critical": Bugs, security vulnerabilities, or problems that MUST be fixed before merging
@@ -337,6 +339,7 @@ Respond in this exact JSON format:
       "severity": "critical"
     }
   ],
+  "resolved_threads": ["PRRT_xxx", "PRRT_yyy"],
   "approval": "approve"
 }
 
@@ -348,6 +351,7 @@ Rules:
 2. "severity" must be one of: "critical", "high", "medium", "low"
 3. "path" must exactly match the file path from the diff
 4. "line" must be the new-file line number shown at the start of each annotated diff line (the number before the | separator). Use that number directly — do NOT try to calculate line numbers yourself.
+5. "resolved_threads" should contain thread IDs (from [thread:XXX] tags) of previous UNRESOLVED comments that the new changes have addressed. If no threads were resolved, use an empty array.
 
 NOTE: The diff below is annotated with new-file line numbers. Each line inside a hunk is prefixed with "NNNNN | " where NNNNN is the line number to use in your comments. Deleted lines show "      | " with no number (they cannot be commented on).
 
@@ -397,6 +401,9 @@ func formatExistingComments(comments []ExistingComment) string {
 			status = "RESOLVED"
 		}
 		builder.WriteString(fmt.Sprintf("- [%s] %s:%d", status, c.Path, c.Line))
+		if c.ThreadID != "" {
+			builder.WriteString(fmt.Sprintf(" [thread:%s]", c.ThreadID))
+		}
 		if c.Author != "" {
 			builder.WriteString(fmt.Sprintf(" (by @%s)", c.Author))
 		}
